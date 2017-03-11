@@ -483,7 +483,7 @@ namespace proxyServer
 
             //MITM SSL Configuration
             h.CreateInteractive("config_ssl_mitm", "Helps To configure HTTPs MITM Attacks");
-            h.AddMessage("config_ssl", "1. Enable MITM\r\ncommand: mitm up", "2. Enable SSL Certification manager\r\ncommand: sslcert_manager up", "3. Enter SSL Cert Man" +
+            h.AddMessage("config_ssl_mitm", "1. Enable MITM\r\ncommand: mitm up", "2. Enable SSL Certification manager\r\ncommand: sslcert_manager up", "3. Enter SSL Cert Man" +
                 " Interactive Mode\r\ncommand: sslcert_manager", "4. Generate Certificate\r\ncommand: generate [file_name] [subject_name] [key_length]\r\ne.g" +
                 " generate test.cer ah101 2048", "5. Set file path\r\ncommand: set file_path [file path]\r\ne.g set file_path test.cer", "6. Set Protocols\r\ncommand: " +
                 "set protocols [protocol names]\r\ne.g set protocols tls,sslv3,sslv2", "7. Test if everything works fine!\r\ncommand: test", "8. Go to main menu\r\ncommand: exit"
