@@ -1,0 +1,33 @@
+<help>
+<commands>set auto_payload,get auto_payload,add match_payload,remove match_payload,list_payload,add media_replace,remove media_replace,list media_replace,bind regex,unbind regex,bind filter,unbind filter,list bind regex,list bind filter,set match_mode,set match_option,set match_engine,Payload or File Path,Filter Name,Filter or Regex Name,Payload,File or URL,Regex Name,Bind Name,Match Engine,Match Option,Match Mode,cls,exit
+</commands>
+<cmd_set.auto_payload params="Payload or File Path">Set a payload for the automatic content injection</cmd_set.auto_payload>
+<cmd_get.auto_payload params="">Print the payload set to automatic content injection</cmd_get.auto_payload>
+<cmd_add.match_payload params="Filter or Regex Name,Payload">Assign payload to a filter or regex name</cmd_add.match_payload>
+<cmd_remove.match_payload params="Filter Name">Remove a payload form beign associated with a filter or regex name</cmd_remove.match_payload>
+<cmd_list_payload params="">List the current association of payloads with filter or regex names</cmd_list_payload>
+<cmd_add.media_replace params="Filter or Regex Name,File or URL">Associate a media file or link ot a media file with a filter or regex name</cmd_add.media_replace>
+<cmd_remove.media_replace params="Filter Name">Remvoe a media file or URL from beign associated with a filter or regex name</cmd_remove.media_replace>
+<cmd_list.media_replace params="">List the association of media files, URLS with filter or regex names</cmd_list.media_replace>
+<cmd_bind.regex params="Regex Name,Bind Name">Bind a valid regex group to a service with the specified name</cmd_bind.regex>
+<cmd_unbind.regex params="Regex Name">Unbind a valid regex group from a service</cmd_unbind.regex>
+<cmd_bind.filter params="Filter Name,Bind Name">Bind a valid filter to service with the specified name</cmd_bind.filter>
+<cmd_unbind.filter params="Filter Name">Unbind a filter from a service</cmd_unbind.filter>
+<cmd_list.bind.regex params="">List the bound regex groups of a service</cmd_list.bind.regex>
+<cmd_list.bind.filter params="">List the bound filters of a service</cmd_list.bind.filter>
+<cmd_set.match_engine params="Match Engine">Set the match engine for match injections</cmd_set.match_engine>
+<cmd_set.match_option params="Match Option">Set the matching option for match injections</cmd_set.match_option>
+<cmd_set.match_mode params="Match Mode">Set the match mode for match injections</cmd_set.match_mode>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Leave Injection Interactive Mode</cmd_exit>
+<p_Payload.or.File.Path values="A payload written by hand in the input line,|,A file path with extension to the file (can be relative)">Defines a valid payload, files get resolved to text after setting</p_Payload.or.File.Path>
+<p_Filter.or.Regex.Name values="A valid Filter or Regex Group name">Defines a valid filter or regex name which is used for filtering, conditional actions</p_Filter.or.Regex.Name>
+<p_Filter.Name values="A valid filter name">Defines a valid, existing filter name</p_Filter.Name>
+<p_Payload values="A text written by hand to the input line">Defines a valid one-line payload for injection</p_Payload>
+<p_File.or.URL values="Path to an existing file with extension (can be relative),|,An URL to a media file (not web page) beginning with http:// or https:// or www.">Defines a valid media source which gets resolved to array of bytes</p_File.or.URL>
+<p_Regex.Name values="A valid name of a created regex group">Defines a valid name of a regex group, used for conditional actions</p_Regex.Name>
+<p_Bind.Name values="Any string name - the service may have preferenced names for some filters">Defines a name for binding a filter or regex group to a service</p_Bind.Name>
+<p_Match.Engine values="filter,regex">Defines a valid engine to use for filtering and conditional actions by the Injection Manager</p_Match.Engine>
+<p_Match.Option values="and,or,both">Defines a valid option for checking the condition relations</p_Match.Option>
+<p_Match.Mode values="after,before,replace">Defines a valid mode for the position of injecting the content, starting from the line the match was found in</p_Match.Mode>
+</help>

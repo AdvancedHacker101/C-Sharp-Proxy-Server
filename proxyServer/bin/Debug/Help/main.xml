@@ -1,0 +1,49 @@
+<help>
+<commands>set ip,set port,set pending_limit,cls,exit,start,set font_size,auto_allow,set pin,pin_manager,stop,list,kick,save,load,clean_client,logger,filter_manager,mitm,sslcert_manager,set_mode,list_modes,dump_manager,regex_manager,help,IP Address,Port Number,Connection Limit,Size,State,PIN Code,Client ID,Save Name,Protocol,Mode,Module Name
+</commands>
+<cmd_set.ip params="IP Address">Set the IP Address of the proxy server to run on</cmd_set.ip>
+<cmd_set.port params="Port Number">Set the Port Number of the proxy server to run on</cmd_set.port>
+<cmd_set.pending_limit params="Connection Limit">Set the number of connections allowed in pending state</cmd_set.pending_limit>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Exit the proxy server</cmd_exit>
+<cmd_start params="">Start listening for connections</cmd_start>
+<cmd_set.font_size params="Size">Set the font size (in points) of the console screen</cmd_set.font_size>
+<cmd_auto_allow params="State">Set wheter to allow all connections, or accept them manually</cmd_auto_allow>
+<cmd_set.pin params="PIN Code">Set pin code to prompt on every command</cmd_set.pin>
+<cmd_pin_manager params="State">Set wheter to use the PIN Code service</cmd_pin_manager>
+<cmd_stop params="">Stop listening for new connections, close existing ones</cmd_stop>
+<cmd_list params="">List connected clients</cmd_list>
+<cmd_kick params="Client ID">Kick a client from the server</cmd_kick>
+<cmd_save params="Save Name">Save the current settings of the program</cmd_save>
+<cmd_load params="Save Name">Load a previously generated save</cmd_load>
+<cmd_clean_client params="">Disconnect all sockets from the server, but don't stop the server</cmd_clean_client>
+<cmd_logger params="State">Set the state of the logger service</cmd_logger>
+<cmd_logger params="">Enter the interactive mode of the logger</cmd_logger>
+<cmd_filter_manager params="State">Set the state of the filter manager service</cmd_filter_manager>
+<cmd_filter_manager params="Enter the interactive mode of the Filter manager">Kick a client from the server</cmd_filter_manager>
+<cmd_mitm params="State">Set the state of the MITM Service</cmd_mitm>
+<cmd_mitm params="">Enter the interactive mode of MITM manager</cmd_mitm>
+<cmd_sslcert_manager params="State">Set the state of the SSL Certification Manager Service</cmd_sslcert_manager>
+<cmd_sslcert_manager params="">Enter the interactive mode of SSL Certification Manager</cmd_sslcert_manager>
+<cmd_set.mode params="Protocol,Mode">Set the mode of the desired protocol</cmd_set.mode>
+<cmd_list_modes params="">Print the currently used modes for each protocols</cmd_list_modes>
+<cmd_dump_manager params="State">Set the state of the Dump Manager Service</cmd_dump_manager>
+<cmd_dump_manager params="">Enter the interactive mode of the Dump Manager</cmd_dump_manager>
+<cmd_regex_manager params="State">Set the state of the RegEx Manager Service</cmd_regex_manager>
+<cmd_regex_manager params="">Enter the interactive mode of RegEx Manager</cmd_regex_manager>
+<cmd_help params="">List help for main program commands</cmd_help>
+<cmd_help.int params="">List the interactive help modules</cmd_help.int>
+<cmd_help.int params="Module Name">Start an interactive service based on the modulename</cmd_help.int>
+<p_IP.Address values="localhost,loopback,any,A valid IPv4 Address">A valid IP Address for the proxy server</p_IP.Address>
+<p_Port.Number values="Number less than 65535,|,For most proxy servers it's 8080">A valid port number for the proxy server</p_Port.Number>
+<p_Connection.Limit values="Any integer (number) value,|,Mostly around 20/30 is good">Set a valid connection limit for the proxy server</p_Connection.Limit>
+<p_Size values="Any double (number with decimnal point) value,|,12.0 is not too big but also readable i think">A valid font size for the console</p_Size>
+<p_State values="Positive states: enable,on,yes,start,up,|,Negative states: disable,off,no,stop,down">A valid to bool convertable value for services</p_State>
+<p_PIN.Code values="Any integer (number) value">A valid code for pin manager</p_PIN.Code>
+<p_Client.ID values="An integer (number) value obtained by the list command">A valid client id to kick</p_Client.ID>
+<p_Save.Name values="Any valid name of a save you made,In case of save command: any name without file extension">A valid name for Settings Manager to save/load</p_Save.Name>
+<p_Protocol values="http,https">Specifies a valid protocol name for the server</p_Protocol>
+<p_Mode values="forward/normal,|,mitm/man-in-the-middle">Specifies a valid mode for a protocol</p_Mode>
+<p_Module.Name values="An valid module name listed by the help int command">Specifies a valid name of an interactive help to run</p_Module.Name>
+
+</help>

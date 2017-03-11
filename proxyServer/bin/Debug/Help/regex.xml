@@ -1,0 +1,13 @@
+<help>
+<commands>add group,add exp,remove exp,remove group,list group,list exp,cls,exit</commands>
+<cmd_add.group params="Group Name">Create a new Regex Group</cmd_add.group>
+<cmd_add.exp params="Group Name,Regex">Add a new Regular Expression to an existing group</cmd_add.exp>
+<cmd_remove.group params="Group Name">Remove an existing Group from the Regex Groups</cmd_remove.group>
+<cmd_remove.exp params="Group Name,Regex">Remive an existing Expression from a group</cmd_remove.exp>
+<cmd_list.group params="">List the existing Regex Groups</cmd_list.group>
+<cmd_list.exp params="Group Name">List the expressions of an existing group</cmd_list.exp>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Leave Regex Interactive Mode</cmd_exit>
+<p_Group.Name values="Any valid regex group name,|,In case of creating a group any valid string that doesn't contains spaces">Defines a valid name for Regex groups for referencing, creating</p_Group.Name>
+<p_Regex values="Any valid regular expression">Defines a valid regular expression</p_Regex>
+</help>

@@ -1,0 +1,16 @@
+<help>
+<commands>set file_logger,bind,unbind,bind_list,set file_path,set output_data,cls,exit,State,File,Filter Name,Log Levels</commands>
+<cmd_set.file_logger params="State">Set the state of logging to a file</cmd_set.file_logger>
+<cmd_bind params="Filter Name,Log Levels">Associates a filter with a log level type. Filters are checked with and condition relation, if filter hits true then text gets written</cmd_bind>
+<cmd_unbind params="Filter Name">Unbind an associated filter from the logger</cmd_unbind>
+<cmd_bind_list params="">List filters bound to the logger</cmd_bind_list>
+<cmd_set.file_path params="File">Set the file path for logging to a file</cmd_set.file_path>
+<cmd_set.output_data params="Log Level List">Enables only the listed loglevel types to be outputted</cmd_set.output_data>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Leave Logger Interactive Mode</cmd_exit>
+<p_File values="Any valid file path (can be relative) whit extension">defines a valid path to a file</p_File>
+<p_State values="Positive states: enable,on,yes,start,up,|,Negative states: disable,off,no,stop,down">A valid to bool convertable value for services</p_State>
+<p_Filter.Name values="Any existing filter group name">Defines a reference to a filter group</p_Filter.Name>
+<p_Log.Levels values="error,warning,service,request,response,*,all">Defines a log level type</p_Log.Levels>
+<p_Log.Level.List values="A space separated list of Log Levels">Defines a list of log levels. Log Levels are obtained by command: help param Log Levels</p_Log.Level.List>
+</help>

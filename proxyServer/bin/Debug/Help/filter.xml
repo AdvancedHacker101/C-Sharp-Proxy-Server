@@ -1,0 +1,16 @@
+<help>
+<commands>add,del,clear,setup,remove,list,show,cls,exit,New Filter Name,Filter Name,Condition,Input</commands>
+<cmd_add params="New Filter Name">Create a new filter group</cmd_add>
+<cmd_del params="Filter Name">Removes an existing filter group</cmd_del>
+<cmd_clear params="">Remove all filter groups</cmd_clear>
+<cmd_setup params="Filter Name,Condition,Input">Adds a new filter to a filter group</cmd_setup>
+<cmd_remove params="Filter Name,Condition,Input">Removes a filter from a filter group</cmd_remove>
+<cmd_list params="">Print a list of filter groups</cmd_list>
+<cmd_show params="Filter Name">Print each rule for each condition of a filter group</cmd_show>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Leave Filter Manager Interactive Mode</cmd_exit>
+<p_New.Filter.Name values="Any string value without spaces">Defines a name of a new filter group</p_New.Filter.Name>
+<p_Filter.Name values="Any existing filter group name">Defines a reference to a filter group</p_Filter.Name>
+<p_Condition values="equals,notequals,contains,startswith">Defines a checking condition</p_Condition>
+<p_Input values="Any string value (can contain spaces)">Defines a text to check with condition on the programs input text</p_Input>
+</help>

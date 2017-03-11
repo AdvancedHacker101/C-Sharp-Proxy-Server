@@ -1,0 +1,18 @@
+<help>
+<commands>create_filters,check_filters,create_dumpers,check_dumpers,create_injects,check_service,list_service,inject_manager,cls,exit,Service_Name,State,Service State,Service_Name</commands>
+<cmd_create_filters params="">Create all MITM related filters</cmd_create_filters>
+<cmd_check_filters params="">Check the filter setup for possible problems</cmd_check_filters>
+<cmd_create_dumpers params="">Create all MITM related Dump Entries, Files</cmd_create_dumpers>
+<cmd_check_dumpers params="">Check the dump manager setup for possible problems</cmd_check_dumpers>
+<cmd_create_injects params="">Create all MITM related injection manager settings</cmd_create_injects>
+<cmd_Service_Name params="State">Set a MITM service's state</cmd_Service_Name>
+<cmd_check_service params="Service Name">Check the state of a service</cmd_check_service>
+<cmd_list_service params="Service State">List all service with the specified state</cmd_list_service>
+<cmd_inject_manager params="State">Set the state of the inject manager service</cmd_inject_manager>
+<cmd_inject_manager params="">Enter the interactive mode of the inject manager</cmd_inject_manager>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Leave MITM Interactive Mode</cmd_exit>
+<p_Service_Name values="Any valid MITM service name">Defines a valid MITM service. Obtain serivce names from the list_all command</p_Service_Name>
+<p_State values="Positive states: enable,on,yes,start,up,|,Negative states: disable,off,no,stop,down">A valid to bool convertable value for services</p_State>
+<p_Service.State values="online,offline">Defines a valid service listing state</p_Service.State>
+</help>

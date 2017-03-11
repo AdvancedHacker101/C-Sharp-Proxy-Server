@@ -1,0 +1,21 @@
+<help>
+<commands>define_directory,add file,add friendly_name,remove friendly_name,bind,unbind,bind_list,remove file,list,cls,exit</commands>
+<cmd_define_directory params="Directory">Defines a directory for the logs to be create, saved in</cmd_define_directory>
+<cmd_add.file params="File,Friendly Name">Adds a file with the specified path and with the Friendly Name (Friendly Name is optional)</cmd_add.file>
+<cmd_add.friendly_name params="File,Friendly Name">Assign a friendly name to a file after the file is added with the add file command</cmd_add.friendly_name>
+<cmd_remove.friendly_name params="Friendly Name">Remove a friendly name from being associated with a File Path</cmd_remove.friendly_name>
+<cmd_bind params="Filter Name,Friendly Name or File Path">Bind a filter to a friendly name, if a condition is hit, then the text will not be logged.
+ The conditions types will be checked with or relation
+</cmd_bind>
+<cmd_unbind params="Filter Name">Unbind a filter from a friendly name</cmd_unbind>
+<cmd_bind_list params="">List the bound filters to friendly names</cmd_bind_list>
+<cmd_remove.file params="Friendly Name or File Path">Remove a file from the dumping list</cmd_remove.file>
+<cmd_list params="">List the files added to dumping list</cmd_list>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Leave Dump Manager Interactive Mode</cmd_exit>
+<p_Directory values="Any valid directory path (can be relative)">Defines a valid path to a logging directory</p_Directory>
+<p_File values="Any valid file path (can be relative) whit extension">defines a valid path to a file</p_File>
+<p_Friendly.Name values="Any valid string without spaces">Defines a valid Friendly Name for File path association</p_Friendly.Name>
+<p_Friendly.Name.or.File.Path values="An existing friendly name,a valid added file's path">Defines an index to an array of added files based on friendly name or file path</p_Friendly.Name.or.File.Path>
+<p_Filter.Name values="A valid filter name">Defines a valid, existing filter name</p_Filter.Name>
+</help>

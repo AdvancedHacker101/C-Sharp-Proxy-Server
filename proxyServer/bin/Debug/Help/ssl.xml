@@ -1,0 +1,15 @@
+<help>
+<commands>set file_path,generate,test,set protocols,Cert File Path,Cert File Name,Subject Name,Key Length,Protocol List,Protocols</commands>
+<cmd_set.file_path params="Cert File Path">Set's the path to the certification file</cmd_set.file_path>
+<cmd_generate params="Cert File Name,Subject Name,Key Length">Generate a certificate file using makecert. Subject Name and Key length is optional default values are: ah101, 2048</cmd_generate>
+<cmd_test params="">Test the certification file</cmd_test>
+<cmd_set.protocols params="Protocol List">Set the ssl protocols to be used by authentication</cmd_set.protocols>
+<cmd_cls params="">Clear the console screen</cmd_cls>
+<cmd_exit params="">Leave SSL Certification Manager Interactive Mode</cmd_exit>
+<p_Cert.File.Path values="Any valid existing file path with extension (can be relative)">Defines an existing path to a certificate</p_Cert.File.Path>
+<p_Cert.File.Name values="Any valid file name with extension (can be relative)">Defines a new file name for certificate generation. Extension is: .cer</p_Cert.File.Name>
+<p_Subject.Name values="Any valid string value without spaces">Defines a subject name for the new certification Default: ah101</p_Subject.Name>
+<p_Key.Length values="Any valid integer value">Defines the length of the encryption key Default: 2048</p_Key.Length>
+<p_Protocol.List values="A list of [Protocols] separated by ',' (comma)">Defines a list of Protocols. For more help type: help param Protocols -to get the valid protocol names</p_Protocol.List>
+<p_Protocols values="default,tls,tls11,tls12,sslv3,sslv2">Defines a protocol used for ssl. The default protocol is sslv3 + tlsv1</p_Protocols>
+</help>
