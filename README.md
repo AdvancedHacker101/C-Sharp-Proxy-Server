@@ -12,5 +12,9 @@ That's it, your server is now working normally, to save the current settings typ
 Any time you close the program and re-open it just type:  
 `load normal` - this wil load the previously saved settings.  
 **Loading a settings file will NOT start the server, you need to start it by using the start command**  
-For advanced settings read: [Advanced Settings]()
-For MITM stuff read: [MITM Mode]()
+For advanced settings read: [Advanced Settings](https://github.com/AdvancedHacker101/C-Sharp-Proxy-Server/blob/master/advanced.md)  
+For MITM stuff read: [MITM Mode](https://github.com/AdvancedHacker101/C-Sharp-Proxy-Server/blob/master/mitm.md)  
+Features planned to be added:  
+- [ ] Capture HTTP Basic Auth Requests
+- [ ] SOCKS5 Mode
+- [ ] Communication with the [C# R.A.T Client](https://github.com/AdvancedHacker101/C-Sharp-R.A.T-Client)
