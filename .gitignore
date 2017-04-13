@@ -264,6 +264,4 @@ __pycache__/
 /proxyServer/bin/Debug/proxyServer.exe.config
 /proxyServer/bin/Debug/test.cer
 /proxyServer/bin/Debug/test.html
-/proxyServer/bin/Debug/[Dd]umps/
-/proxyServer/bin/Debug/[Pp]rofiles/
 /proxyServer/bin/Debug/gencert.bat

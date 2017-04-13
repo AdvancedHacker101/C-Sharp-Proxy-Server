@@ -14,6 +14,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Diagnostics;
 using System.Security.Authentication;
 using System.Text.RegularExpressions;
+using appCom;
 
 namespace proxyServer
 {
@@ -72,10 +73,42 @@ namespace proxyServer
         public VRegEx RegMod;
         public VInject InjectMod;
         public VHelp HelpMod;
+        public Client _ipcClient;
 
         public Form1()
         {
             InitializeComponent();
+        }
+
+        private void StartIPCHandler()
+        {
+            bool canContinue = false;
+
+            foreach (string arg in Environment.GetCommandLineArgs())
+            {
+                if (arg == "use_ipc")
+                {
+                    canContinue = true;
+                    break;
+                }
+            }
+
+            if (!canContinue)
+            {
+                ConMod.WriteLine("No ipc argument specified!");
+                _ipcClient = null;
+                return;
+            }
+            Client c = new Client();
+            c.ConnectPipe("tut_client_proxy", 1337);
+            c.OnMessageReceived += new Client.OnMessageReceivedEventHandler(ReadIPC);
+            _ipcClient = c;
+        }
+
+        private void ReadIPC(ClientMessageEventArgs e)
+        {
+            VConsole.ReadLineEventArgs ea = new VConsole.ReadLineEventArgs(e.Message);
+            OnCommand(ConMod, ea);
         }
 
         #region HelperMethods
@@ -217,6 +250,8 @@ namespace proxyServer
 
         private void FinalExit()
         {
+            if (_ipcClient != null) _ipcClient.StopPipe();
+
             if (server != null)
             {
                 server.StopServer();
@@ -463,6 +498,10 @@ namespace proxyServer
             //Setup Help
 
             SetupInteractiveHelp();
+
+            //IPC Handler
+
+            StartIPCHandler();
         }
 
         private void SetupInteractiveHelp()
@@ -1761,7 +1800,7 @@ namespace proxyServer
                 {
                     server = new ProxyServer(ip, port, pendingConnectionLimit, console, this);
                 }
-                SetMod.SetupObjects(this, console, pinManager, server, vf, RegMod, logger, DumpMod, mitmHttp, InjectMod);
+                SetMod.SetupObjects(this, console, pinManager, server, vf, RegMod, logger, DumpMod, CertMod, mitmHttp, InjectMod);
                 SetMod.Save(filename);
             }
             else if (command.StartsWith("load "))
@@ -1769,7 +1808,7 @@ namespace proxyServer
                 string filename = command.Substring(5);
                 SetMod.FindFile(filename);
                 CreateServer();
-                SetMod.SetupObjects(this, console, pinManager, server, vf, RegMod, logger, DumpMod, mitmHttp, InjectMod);
+                SetMod.SetupObjects(this, console, pinManager, server, vf, RegMod, logger, DumpMod, CertMod, mitmHttp, InjectMod);
                 SetMod.Load();
             }
             else if (command == "clean_client")
@@ -4197,7 +4236,7 @@ namespace proxyServer
         {
             xml.WriteStartElement("settings_start");
             xml.WriteStartElement("dumper");
-            xml.WriteElementString("state", (started) ? "false" : "true");
+            xml.WriteElementString("state", (started) ? "true" : "false");
 
             foreach (string file in dumpFiles)
             {
@@ -7794,6 +7833,7 @@ namespace proxyServer
                 output.Select(output.Text.Length - 1, 0);
                 output.ScrollToCaret();
                 output.Select(0, 0);
+                if (ctx._ipcClient != null) ctx._ipcClient.WriteStream(backup);
             }
         }
 
@@ -7835,6 +7875,7 @@ namespace proxyServer
                 output.Select(output.Text.Length, 0);
                 output.ScrollToCaret();
                 output.Select(0, 0);
+                if (ctx._ipcClient != null) ctx._ipcClient.WriteStream(backup);
             }
         }
 
@@ -8034,7 +8075,7 @@ namespace proxyServer
             dw.AddCondition(() => httpMode == Mode.MITM && !ctx.mitmHttp.started, ctx.CreateLog("MITM mode is set for http, but mitm service is not enabled!", VLogger.LogLevel.warning));
             dw.AddCondition(() => httpsMode == Mode.MITM && !ctx.server.started, ctx.CreateLog("MITM mode is set for https, but mitm service is not enabled", VLogger.LogLevel.warning));
             dw.AddCondition(() => httpsMode == Mode.MITM && !ctx.CertMod.started, ctx.CreateLog("MITM mode is set for https, but SSL Certification service is not started!", VLogger.LogLevel.warning));
-            dw.AddCondition(() => ctx.mitmHttp.started && httpMode != Mode.MITM && httpMode != Mode.MITM, ctx.CreateLog("MITM Service is running but no protocol modes set to MITM mode", VLogger.LogLevel.warning));
+            dw.AddCondition(() => ctx.mitmHttp.started && httpMode != Mode.MITM && httpsMode != Mode.MITM, ctx.CreateLog("MITM Service is running but no protocol modes set to MITM mode", VLogger.LogLevel.warning));
             if (autoClean)
             {
                 _timer = new System.Windows.Forms.Timer();
@@ -8832,6 +8873,23 @@ namespace proxyServer
                     resp.Serialize();
                     supressPushEnd = true;
                 }
+                else
+                {
+                    if (resp.bogus)
+                    {
+                        string prevText = resp.fullText;
+                        string newText = prevText + text;
+                        byte[] newBuf = new byte[resp.fullBytes.Length + buf.Length];
+                        Array.ConstrainedCopy(resp.fullBytes, 0, newBuf, 0, resp.fullBytes.Length);
+                        Array.ConstrainedCopy(buf, 0, newBuf, resp.fullBytes.Length, buf.Length);
+                        resp = new Response(newText, newBuf, console, ctx.mitmHttp);
+                        resp.SetManager(ctx.vf);
+                        resp.BindFilter("resp_mime", "mime_white_list");
+                        resp.BindFilter("resp_mime_block", "mime_skip_list");
+                        resp.Serialize();
+                        supressPushEnd = true;
+                    }
+                }
 
                 if (resp.skip)
                 {
@@ -8843,7 +8901,7 @@ namespace proxyServer
                     resp.PushEnd(buf);
                 }
 
-                if (!resp.notEnded && !resp.skip)
+                if (!resp.notEnded && !resp.skip && !resp.bogus)
                 {
                     if (ctx.mitmHttp.started)
                     {
