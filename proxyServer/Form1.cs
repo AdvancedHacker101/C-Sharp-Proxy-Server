@@ -5489,6 +5489,8 @@ namespace proxyServer
         public bool CheckHost(Request httpRequest)
         {
             string host = httpRequest.headers["Host"];
+            bool serviceState = CheckServiceState(BlockServices.Host);
+            if (!serviceState) return false;
             bool result = false;
             if (vf.IsFilterEmpty("mitm_hostblock_white")) result = vf.RunAllCompareOr("mitm_hostblock_black", host);
             else result = !vf.RunAllCompareOr("mitm_hostblock_white", host); //revert the value, because we don't want to block whitelisted hosts
@@ -5503,6 +5505,8 @@ namespace proxyServer
 
         public bool CheckIP(string ipAddress)
         {
+            bool serviceState = CheckServiceState(BlockServices.IP);
+            if (!serviceState) return false;
             bool result = false;
             if (vf.IsFilterEmpty("mitm_ipblock_white")) result = vf.RunAllCompareOr("mitm_ipblock_black", ipAddress);
             else result = !vf.RunAllCompareOr("mitm_ipblock_white", ipAddress); //revert the value, because we don't want to block whitelisted hosts
@@ -5517,6 +5521,8 @@ namespace proxyServer
 
         public bool CheckBody(string bodyText)
         {
+            bool serviceState = CheckServiceState(BlockServices.Body);
+            if (!serviceState) return false;
             bool result = false;
             if (vf.IsFilterEmpty("mitm_bodyblock_white")) result = vf.RunAllCompareOr("mitm_bodyblock_black", bodyText);
             else result = !vf.RunAllCompareOr("mitm_bodyblock_white", bodyText); //revert the value, because we don't want to block whitelisted hosts
@@ -8612,7 +8618,7 @@ namespace proxyServer
                 //console.Debug("https, connect request");
             }
 
-            if ((protocol == Mode.HTTP && http == ProxyServer.Mode.MITM) || (protocol == Mode.HTTPs && https == ProxyServer.Mode.MITM) && ctx.mitmHttp.started) //only block if mitm is set
+            if (((protocol == Mode.HTTP && http == ProxyServer.Mode.MITM) || (protocol == Mode.HTTPs && https == ProxyServer.Mode.MITM)) && ctx.mitmHttp.started) //only block if mitm is set
             {
                 bool hostResult = ctx.mitmHttp.CheckHost(req);
                 if (hostResult)
