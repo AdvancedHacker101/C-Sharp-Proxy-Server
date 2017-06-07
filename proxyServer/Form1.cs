@@ -73,7 +73,7 @@ namespace proxyServer
         public VRegEx RegMod;
         public VInject InjectMod;
         public VHelp HelpMod;
-        public Client _ipcClient;
+        public Server _ipcServer;
 
         public Form1()
         {
@@ -96,16 +96,23 @@ namespace proxyServer
             if (!canContinue)
             {
                 ConMod.WriteLine("No ipc argument specified!");
-                _ipcClient = null;
+                _ipcServer = null;
                 return;
             }
-            Client c = new Client();
-            c.ConnectPipe("tut_client_proxy", 1337);
-            c.OnMessageReceived += new Client.OnMessageReceivedEventHandler(ReadIPC);
-            _ipcClient = c;
+
+            Thread t = new Thread(new ThreadStart(StartIPCServer));
+            t.Start();
         }
 
-        private void ReadIPC(ClientMessageEventArgs e)
+        private void StartIPCServer()
+        {
+            Server c = new Server();
+            c.StartPipe("tut_client_proxy");
+            c.OnMessageReceived += new Server.OnMessageReceivedEventHandler(ReadIPC);
+            _ipcServer = c;
+        }
+
+        private void ReadIPC(MessageEventArgs e)
         {
             VConsole.ReadLineEventArgs ea = new VConsole.ReadLineEventArgs(e.Message);
             OnCommand(ConMod, ea);
@@ -250,7 +257,7 @@ namespace proxyServer
 
         private void FinalExit()
         {
-            if (_ipcClient != null) _ipcClient.StopPipe();
+            if (_ipcServer != null) _ipcServer.CloseAllPipes();
 
             if (server != null)
             {
@@ -7839,7 +7846,7 @@ namespace proxyServer
                 output.Select(output.Text.Length - 1, 0);
                 output.ScrollToCaret();
                 output.Select(0, 0);
-                if (ctx._ipcClient != null) ctx._ipcClient.WriteStream(backup);
+                if (ctx._ipcServer != null) ctx._ipcServer.WriteStream("tut_client_proxy", backup);
             }
         }
 
@@ -7881,7 +7888,7 @@ namespace proxyServer
                 output.Select(output.Text.Length, 0);
                 output.ScrollToCaret();
                 output.Select(0, 0);
-                if (ctx._ipcClient != null) ctx._ipcClient.WriteStream(backup);
+                if (ctx._ipcServer != null) ctx._ipcServer.WriteStream("tut_client_proxy", backup);
             }
         }
 
