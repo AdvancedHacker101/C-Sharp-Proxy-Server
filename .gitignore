@@ -258,10 +258,10 @@ paket-files/
 __pycache__/
 *.pyc
 #No exe files
-/proxyServer/bin/Debug/makecert.exe
+#/proxyServer/bin/Debug/makecert.exe
 /proxyServer/bin/Debug/proxyServer.exe
 /proxyServer/bin/Debug/proxyServer.pdb
 /proxyServer/bin/Debug/proxyServer.exe.config
 /proxyServer/bin/Debug/test.cer
 /proxyServer/bin/Debug/test.html
-/proxyServer/bin/Debug/gencert.bat
+#/proxyServer/bin/Debug/gencert.bat
