@@ -15,7 +15,8 @@ This way you can suggest new features, or change an older one without coding.
 I will try to respond within 24 hours!  
 ## How to run / compile
 I use Visual Studio 2017 Community Edition.  
-The c++ programs doesn't require .NET framework, the c\# Project is built with .NET Framework 4.5.2  
+This project is written in c\# and requires .NET Framework 4.5.2  
+Required files can be found under proxyServer/bin/Debug  
 ## How to ask questions?
 You can also use the *Issues* section on GitHub, i will assign a label to it, so it's different from bugs.  
 I will try to respond within 24 hours!  
