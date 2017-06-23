@@ -18,3 +18,7 @@ Features planned to be added:
 - [ ] Capture HTTP Basic Auth Requests
 - [ ] SOCKS5 Mode
 - [ ] Communication with the [C# R.A.T Client](https://github.com/AdvancedHacker101/C-Sharp-R.A.T-Client)
+## More information
+You can read the licence [here](https://github.com/AdvancedHacker101/C-Sharp-Proxy-Server/blob/master/LICENSE)  
+You can read the code of conduct [here](https://github.com/AdvancedHacker101/C-Sharp-Proxy-Server/blob/master/CODE_OF_CONDUCT.md)  
+You can read how to contribute [here](https://github.com/AdvancedHacker101/C-Sharp-Proxy-Server/blob/master/CONTRIBUTING.md)
