@@ -6,8 +6,8 @@
 <cmd_add.match_payload params="Filter or Regex Name,Payload">Assign payload to a filter or regex name</cmd_add.match_payload>
 <cmd_remove.match_payload params="Filter Name">Remove a payload form beign associated with a filter or regex name</cmd_remove.match_payload>
 <cmd_list_payload params="">List the current association of payloads with filter or regex names</cmd_list_payload>
-<cmd_add.media_replace params="Filter or Regex Name,File or URL">Associate a media file or link ot a media file with a filter or regex name</cmd_add.media_replace>
-<cmd_remove.media_replace params="Filter Name">Remvoe a media file or URL from beign associated with a filter or regex name</cmd_remove.media_replace>
+<cmd_add.media_replace params="Filter or Regex Name,File or URL">Associate a media file or link to a media file with a filter or regex name</cmd_add.media_replace>
+<cmd_remove.media_replace params="Filter Name">Remove a media file or URL from beign associated with a filter or regex name</cmd_remove.media_replace>
 <cmd_list.media_replace params="">List the association of media files, URLS with filter or regex names</cmd_list.media_replace>
 <cmd_bind.regex params="Regex Name,Bind Name">Bind a valid regex group to a service with the specified name</cmd_bind.regex>
 <cmd_unbind.regex params="Regex Name">Unbind a valid regex group from a service</cmd_unbind.regex>

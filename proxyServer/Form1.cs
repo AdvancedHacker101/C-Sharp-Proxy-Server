@@ -15,6 +15,18 @@ using System.Diagnostics;
 using System.Security.Authentication;
 using System.Text.RegularExpressions;
 using appCom;
+using Org.BouncyCastle.X509;
+using Org.BouncyCastle.Crypto.Generators;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Security;
+using Org.BouncyCastle.Crypto.Prng;
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Math;
+using System.Threading.Tasks;
+using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Utilities;
+using Org.BouncyCastle.Pkcs;
+using System.Net.Http;
 
 namespace proxyServer
 {
@@ -61,7 +73,7 @@ namespace proxyServer
         public string ip = "localhost";
         public int port = 8080;
         public ProxyServer server;
-        private VConsole ConMod;
+        public VConsole ConMod;
         private VPin PinMod;
         private VSettings SetMod;
         public VLogger LogMod;
@@ -79,6 +91,8 @@ namespace proxyServer
         {
             InitializeComponent();
         }
+
+        #region IPC Methods
 
         private void StartIPCHandler()
         {
@@ -118,6 +132,8 @@ namespace proxyServer
             OnCommand(ConMod, ea);
         }
 
+        #endregion
+
         #region HelperMethods
 
         public string GetPayload(string payload)
@@ -142,11 +158,13 @@ namespace proxyServer
 
         public VLogger.LogObj CreateLog(string text, VLogger.LogLevel ll)
         {
-            VLogger.LogObj lo = new VLogger.LogObj();
-            lo.message = text;
-            lo.ll = ll;
-            lo.r = null;
-            lo.resp = null;
+            VLogger.LogObj lo = new VLogger.LogObj
+            {
+                message = text,
+                ll = ll,
+                r = null,
+                resp = null
+            };
             return lo;
         }
 
@@ -259,6 +277,8 @@ namespace proxyServer
         {
             if (_ipcServer != null) _ipcServer.CloseAllPipes();
 
+            LogMod.Log("IPC Server Shutdown OK", VLogger.LogLevel.service);
+
             if (server != null)
             {
                 server.StopServer();
@@ -266,26 +286,39 @@ namespace proxyServer
                 server = null;
             }
 
+            LogMod.Log("Server Shutdown OK", VLogger.LogLevel.service);
+
             VdwMod.Dispose();
             VdwMod = null;
+            LogMod.Log("Dependency Watcher Shutdown OK", VLogger.LogLevel.service);
             SetMod.Dispose();
             SetMod = null;
+            LogMod.Log("Settings Shutdown OK", VLogger.LogLevel.service);
             InjectMod.Dispose();
             InjectMod = null;
+            LogMod.Log("Injection Shutdown OK", VLogger.LogLevel.service);
             RegMod.Dispose();
             RegMod = null;
+            LogMod.Log("Filter.Regex Shutdown OK", VLogger.LogLevel.service);
             mitmHttp.Dispose();
             mitmHttp = null;
+            LogMod.Log("MITM Shutdown OK", VLogger.LogLevel.service);
             DumpMod.Dispose();
             DumpMod = null;
+            LogMod.Log("Data Dump Shutdown OK", VLogger.LogLevel.service);
             CertMod.Dispose();
             CertMod = null;
+            LogMod.Log("Certification Manager Shutdown OK", VLogger.LogLevel.service);
             LogMod.Dispose();
             LogMod = null;
+            ConMod.Debug("Logger Shutdown OK");
             vf.Dispose();
             vf = null;
+            ConMod.Debug("Filter.Filters Shutdown OK");
             PinMod.Dispose();
             PinMod = null;
+            ConMod.WriteLine("Pin Manager Shutdown OK");
+            ConMod.WriteLine("Shutting down console and closing process");
             ConMod.Dispose();
             ConMod = null;
             isStarted = false;
@@ -435,7 +468,7 @@ namespace proxyServer
             VLogger logger = new VLogger(console);
             VFilter vfmanager = new VFilter(this, console);
             VMitm mhttp = new VMitm(this, console);
-            VSslCertification ssl = new VSslCertification(logger, console);
+            VSslCertification ssl = new VSslCertification(logger, console, wd);
             VDump dump = new VDump(this, console, logger);
             VRegEx vrx = new VRegEx(logger);
             VInject vi = new VInject(console, vrx, mhttp, wd, this);
@@ -460,7 +493,7 @@ namespace proxyServer
             logger.SetManager(vfmanager);
             vfmanager.started = true;
             dump.DefineDirectory(Application.StartupPath + "\\Dumps");
-            dump.started = true;
+            dump.Started = true;
             vi.SetManager(vfmanager);
             vi.SetManager(vrx);
             mhttp.SetManager(vfmanager);
@@ -471,8 +504,8 @@ namespace proxyServer
             mhttp.CreateDumps();
             mhttp.CreateInjects();
             mhttp.started = false;
-            dump.started = false;
-            ssl.started = false;
+            dump.Started = false;
+            ssl.Started = false;
             wd.StartWatcher();
             ConMod = console;
             PinMod = pin;
@@ -509,6 +542,16 @@ namespace proxyServer
             //IPC Handler
 
             StartIPCHandler();
+
+            //The test function
+
+            //Test();
+            ServicePointManager.DefaultConnectionLimit = 10000;
+        }
+
+        private void Test()
+        {
+            
         }
 
         private void SetupInteractiveHelp()
@@ -527,17 +570,51 @@ namespace proxyServer
             LogMod.HelpFile = "help\\logger.xml";
             h.RegisterServices(this, InjectMod, RegMod, DumpMod, CertMod, mitmHttp, vf, LogMod);
 
-            //MITM SSL Configuration
-            h.CreateInteractive("config_ssl_mitm", "Helps To configure HTTPs MITM Attacks");
-            h.AddMessage("config_ssl_mitm", "1. Enable MITM\r\ncommand: mitm up", "2. Enable SSL Certification manager\r\ncommand: sslcert_manager up", "3. Enter SSL Cert Man" +
-                " Interactive Mode\r\ncommand: sslcert_manager", "4. Generate Certificate\r\ncommand: generate [file_name] [subject_name] [key_length]\r\ne.g" +
-                " generate test.cer ah101 2048", "5. Set file path\r\ncommand: set file_path [file path]\r\ne.g set file_path test.cer", "6. Set Protocols\r\ncommand: " +
-                "set protocols [protocol names]\r\ne.g set protocols tls,sslv3,sslv2", "7. Test if everything works fine!\r\ncommand: test", "8. Go to main menu\r\ncommand: exit"
-                , "9. Start the server\r\ncommand: start", "10. Set HTTPs Mode to MITM\r\ncommand: set mode https mitm");
-            h.AddIdle("config_ssl_mitm", 0, 0, 0, 0, 0, 0, 3, 0, 1);
-            h.AddTrigger("config_ssl_mitm", () => mitmHttp.started, () => CertMod.started, () => ConMod.GetIntercativeGroup() == "ig.ssl", () => ConMod.prevCommand.StartsWith("generate ")
-            , () => CertMod.CertFile != "", () => CertMod.GetProtocols() != SslProtocols.None, () => ConMod.prevCommand == "test", () => ConMod.GetIntercativeGroup() == "ig.null"
-            , () => isStarted, () => server.GetMode("https") == ProxyServer.Mode.MITM);
+            //MITM SSL Configuration (Self Signed)
+
+            h.CreateInteractive("config_ssl_mitm_selfsigned", "Helps to set up a simple MITM attack on ssl session with one self signed key");
+
+            h.AddMessage("config_ssl_mitm_selfsigned", 
+                "1. Enable MITM\r\nCommand: mitm up",
+                "2. Enable Cert Manager\r\nCommand: sslcert_manager up",
+                "3. Enter into cert manager\r\nCommand: sslcert_manager",
+                "4. Generate a new self signed certificate\r\nCommand: generate_general",
+                "5. Setup the protocols\r\nCommand: set protocols tls,sslv3,sslv2",
+                "6. Make sure CA Sign Mode is disabled\r\nCommand: use_ca no",
+                "7. Test the new certificate\r\nCommand: test",
+                "8. Exit from the cert manager\r\nCommand: exit",
+                "9. Start the server\r\nCommand: start",
+                "10. Set HTTPS to MITM Mode\r\nCommand: set mode https mitm");
+            h.AddIdle("config_ssl_mitm_selfsigned", 0, 0, 0, 0, 0, 2, 3, 0, 0, 1);
+            h.AddTrigger("config_ssl_mitm_selfsigned",
+                () => mitmHttp.started, () => CertMod.Started, () => ConMod.GetIntercativeGroup() == "ig.ssl",
+                () => File.Exists("certs\\general.pfx"), () => CertMod.GetProtocols() != SslProtocols.None, 
+                () => !CertMod.UseCASign, () => ConMod.prevCommand == "test", () => ConMod.GetIntercativeGroup() == "ig.null", 
+                () => isStarted, () => server.GetMode("https") == ProxyServer.Mode.MITM);
+
+            //MITM SSL Configuration (CA Signed)
+
+            h.CreateInteractive("config_ssl_mitm_casigned", "Helps to set up an advanced MITM attack on ssl sessions with" +
+                " on fly generated and signed keys by a Trusted CA");
+
+            h.AddMessage("config_ssl_mitm_casigned",
+                "1. Enable MITM\r\nCommand: mitm up",
+                "2. Enable Cert Manager\r\nCommand: sslcert_manager up",
+                "3. Enter into cert manager\r\nCommand: sslcert_manager",
+                "4. Generate a new CA certificate\r\nCommand: generate_ca",
+                "5. Install the CA Cert to trusted root\r\nAttention: You need to have admin rights\r\nCommand: install_ca",
+                "6. Setup the protocols\r\nCommand: set protocols tls,sslv3,sslv2",
+                "7. Make sure CA Sign Mode is enabled\r\nCommand: use_ca yes",
+                "8. Test the new certificate\r\nCommand: test",
+                "9. Exit from the cert manager\r\nCommand: exit",
+                "10. Start the server\r\nCommand: start",
+                "11. Set HTTPS to MITM Mode\r\nCommand: set mode https mitm");
+            h.AddIdle("config_ssl_mitm_casigned", 0, 0, 0, 1, 4, 2, 3, 0, 0, 0, 1);
+            h.AddTrigger("config_ssl_mitm_casigned",
+                () => mitmHttp.started, () => CertMod.Started, () => ConMod.GetIntercativeGroup() == "ig.ssl",
+                () => File.Exists("certs\\AHROOT.pfx"),() => ConMod.prevCommand == "install_ca", () => CertMod.GetProtocols() != SslProtocols.None,
+                () => CertMod.UseCASign, () => ConMod.prevCommand == "test", () => ConMod.GetIntercativeGroup() == "ig.null",
+                () => isStarted, () => server.GetMode("https") == ProxyServer.Mode.MITM);
 
             //MITM Http Configuration
 
@@ -554,7 +631,7 @@ namespace proxyServer
                 "4. Start Post Dump Service\r\ncommand: mitm_postparams_dump up", "5. Check if dumpers are working\r\ncommand: check_dumpers",
                 "6. Go to main menu\r\ncommand: exit", "7. Start Server\r\ncommand: start");
             h.AddIdle("config_post_dump", 0,0,0,0,2,0,1);
-            h.AddTrigger("config_post_dump", () => mitmHttp.started, () => DumpMod.started, () => ConMod.GetIntercativeGroup() == "ig.mitm",
+            h.AddTrigger("config_post_dump", () => mitmHttp.started, () => DumpMod.Started, () => ConMod.GetIntercativeGroup() == "ig.mitm",
                 () => mitmHttp.CheckServiceState(VMitm.DumpServices.PostParameters), () => ConMod.prevCommand == "check_dumpers",
                 () => ConMod.GetIntercativeGroup() == "ig.null", () => isStarted);
 
@@ -585,56 +662,18 @@ namespace proxyServer
                 () => ConMod.prevCommand == "get auto_payload", () => ConMod.GetIntercativeGroup() == "ig.mitm", () => ConMod.GetIntercativeGroup() == "ig.null", () => isStarted);
         }
 
-        private void kThread()
-        {
-            TcpListener listener = new TcpListener(IPAddress.Any, 8080);
-            listener.Start(2);
-            while (true)
-            {
-                TcpClient client = listener.AcceptTcpClient();
-                byte[] buffer = new byte[1024];
-                int read = client.GetStream().Read(buffer, 0, buffer.Length);
-                string text = Encoding.ASCII.GetString(buffer, 0, read);
-                string fLine = text.Split('\n')[0];
-                fLine = fLine.Substring(fLine.IndexOf(' '));
-                fLine = fLine.Replace("http://", String.Empty);
-                fLine = fLine.Replace("https://", String.Empty);
-                string host = fLine.Substring(1, fLine.IndexOf('/') - 1);
-                fLine = fLine.Substring(0, fLine.IndexOf(' '));
-                TcpClient tunnel;
-                string payload = text.Replace(host, String.Empty);
-                payload = payload.Replace("http://", String.Empty);
-                payload = payload.Replace("https://", String.Empty);
-
-                if (fLine.EndsWith(":443"))
-                {
-                    tunnel = new TcpClient(host, 443);
-                    if (!tunnel.Connected) tunnel.Connect(host, 443);
-                }
-                else
-                {
-                    tunnel = new TcpClient(host, 80);
-                    if (!tunnel.Connected) tunnel.Connect(host, 80);
-                }
-
-                StreamWriter sw = new StreamWriter(tunnel.GetStream());
-                sw.WriteLine(payload);
-                byte[] _buffer = new byte[1024];
-                int bytesRead = tunnel.GetStream().Read(_buffer, 0, _buffer.Length);
-                client.GetStream().Write(_buffer, 0, bytesRead);
-            }
-        }
-
         private void OnCommand(object obj, VConsole.ReadLineEventArgs e)
         {
             VConsole console = (VConsole)obj;
             VPin pinManager = PinMod;
             string command = e.Text.Trim();
 
-            CommandObj c = new CommandObj();
-            c.console = console;
-            c.pinManager = pinManager;
-            c.command = command;
+            CommandObj c = new CommandObj
+            {
+                console = console,
+                pinManager = pinManager,
+                command = command
+            };
 
             Thread t = new Thread(new ParameterizedThreadStart(CommandThread));
             t.Start(c);
@@ -829,7 +868,7 @@ namespace proxyServer
                     }
                     else if (rest == "param")
                     {
-                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.mitm");
+                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.inject");
                     }
                 }
                 else if (command == "help")
@@ -906,9 +945,9 @@ namespace proxyServer
                 else if (command == "cls") console.Clear();
                 else if (command == "exit")
                 {
-                    console.SetPrompt(RegMod.pRestore);
-                    RegMod.pRestore = "";
-                    RegMod.selfInteractive = false;
+                    console.SetPrompt(RegMod.PRestore);
+                    RegMod.PRestore = "";
+                    RegMod.SelfInteractive = false;
                     console.SetInteractiveGroup("ig.null");
                     console.Clear();
                 }
@@ -926,7 +965,7 @@ namespace proxyServer
                     }
                     else if (rest == "param")
                     {
-                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.mitm");
+                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.regex");
                     }
                 }
                 else if (command == "help")
@@ -1068,9 +1107,9 @@ namespace proxyServer
                 else if (command == "cls") console.Clear();
                 else if (command == "exit")
                 {
-                    console.SetPrompt(DumpMod.pRestore);
-                    DumpMod.pRestore = "";
-                    DumpMod.selfInteractive = false;
+                    console.SetPrompt(DumpMod.PRestore);
+                    DumpMod.PRestore = "";
+                    DumpMod.SelfInteractive = false;
                     console.Clear();
                     console.SetInteractiveGroup("ig.null");
                 }
@@ -1088,7 +1127,7 @@ namespace proxyServer
                     }
                     else if (rest == "param")
                     {
-                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.mitm");
+                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.dump");
                     }
                 }
                 else if (command == "help")
@@ -1107,35 +1146,69 @@ namespace proxyServer
 
             if (console.GetIntercativeGroup() == "ig.ssl")
             {
-                if (command.StartsWith("set file_path "))
+                if (command.StartsWith("generate_general"))
                 {
-                    string path = command.Substring(14);
-                    bool result = CertMod.SetFile(path);
-                    if (result) logger.Log("File path set to " + path, VLogger.LogLevel.information);
-                    else logger.Log("File path not found", VLogger.LogLevel.error);
-                }
-                else if (command.StartsWith("generate "))
-                {
-                    string sub = command.Substring(9);
-                    String[] options = sub.Split(' ');
-                    bool result = false;
-                    if (options.Length == 1) result = CertMod.GenerateCertificate(options[0]);
-                    else if (options.Length == 2) result = CertMod.GenerateCertificate(options[0], options[1]);
-                    else if (options.Length == 3) result = CertMod.GenerateCertificate(options[0], options[1], int.Parse(options[2]));
+                    string sub = command.Substring(16);
+                    if (sub.Length == 0) CertMod.GenerateSelfSigned(); //No options
                     else
+                    {
+                        String[] options = sub.Split(' ');
+                        if (options.Length == 1) CertMod.GenerateSelfSigned(options[0]);
+                        else
+                        {
+                            logger.Log("Wrong number of arguments", VLogger.LogLevel.error);
+                            return;
+                        } 
+                    }
+                }
+                else if (command == "init")
+                {
+                    CertMod.Init();
+                    logger.Log("Certification Init Function Completed", VLogger.LogLevel.information);
+                }
+                else if (command.StartsWith("generate_ca"))
+                {
+                    string sub = command.Substring(12);
+                    bool result = false;
+                    if (sub.Length == 0) result = CertMod.GenerateCA();
+                    else
+                    {
+                        String[] options = sub.Split(' ');
+                        if (options.Length == 1) result = CertMod.GenerateCA(options[0]);
+                        else
+                        {
+                            logger.Log("Wrong number of arguments", VLogger.LogLevel.error);
+                            return;
+                        }
+                    }
+
+                    if (!result)
+                    {
+                        logger.Log("CA Cert Generation failed!", VLogger.LogLevel.error);
+                    }
+                }
+                else if (command == "install_ca")
+                {
+                    bool result = CertMod.InstallToTrustedRoot();
+                    if (result) logger.Log("Root CA Certificate Installed Sucessfully!", VLogger.LogLevel.information);
+                    else logger.Log("Root CA Certificate Installation Failed!\r\nCheck if you have admin rights!", VLogger.LogLevel.error);
+                }
+                else if (command.StartsWith("use_ca "))
+                {
+                    string sub = command.Substring(7);
+                    if (sub == "")
                     {
                         logger.Log("Wrong number of arguments", VLogger.LogLevel.error);
                         return;
                     }
 
-                    if (!result)
-                    {
-                        logger.Log("Cert Generation failed!\r\nmakecert.exe might doesn't exist!", VLogger.LogLevel.error);
-                    }
+                    bool result = S2b(sub, false);
+                    CertMod.UseCASign = result;
+                    logger.Log("Certificate CA Signing is " + ((result) ? "enabled" : "disabled"), VLogger.LogLevel.information);
                 }
                 else if (command == "test")
                 {
-                    if (CertMod.GetCert() == null) logger.Log("Certification parse failed!\r\nTry regenerating the certificate and check the file path", VLogger.LogLevel.error);
+                    if (!CertMod.GetCert()) logger.Log("Certification parse failed!\r\nTry regenerating the certificate and check the file path", VLogger.LogLevel.error);
                     else logger.Log("Certification is parsed correctly", VLogger.LogLevel.information);
                 }
                 else if (command.StartsWith("set protocols "))
@@ -1161,9 +1234,9 @@ namespace proxyServer
                 else if (command == "cls") console.Clear();
                 else if (command == "exit")
                 {
-                    console.SetPrompt(CertMod.pRestore);
-                    CertMod.pRestore = null;
-                    CertMod.selfInteractive = false;
+                    console.SetPrompt(CertMod.PRestore);
+                    CertMod.PRestore = null;
+                    CertMod.SelfInteractive = false;
                     console.SetInteractiveGroup("ig.null");
                     console.Clear();
                 }
@@ -1181,7 +1254,7 @@ namespace proxyServer
                     }
                     else if (rest == "param")
                     {
-                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.mitm");
+                        console.WriteLine("Type help param [parameter name] -to get help about a parameter listed by the help of a command", "ig.ssl");
                     }
                 }
                 else if (command == "help")
@@ -1389,7 +1462,7 @@ namespace proxyServer
                     string name = command.Substring(4);
                     if (name.Contains(" "))
                     {
-                        logger.Log("Filter names can'r contain spaces!\r\n Use dash \"-\" instead.", VLogger.LogLevel.error);
+                        logger.Log("Filter names can't contain spaces!\r\n Use dash \"-\" instead.", VLogger.LogLevel.error);
                         return;
                     }
                     bool result = vf.CreateFilter(name);
@@ -1779,27 +1852,6 @@ namespace proxyServer
                 server = null;
                 isStarted = false;
             }
-            else if (command == "list")
-            {
-                if (!isStarted)
-                {
-                    ServerNotStarted();
-                    return;
-                }
-
-                server.ListClients();
-            }
-            else if (command.StartsWith("kick "))
-            {
-                if (!isStarted)
-                {
-                    ServerNotStarted();
-                    return;
-                }
-
-                int id = int.Parse(command.Substring(5));
-                server.Kick(id);
-            }
             else if (command.StartsWith("save "))
             {
                 string filename = command.Substring(5);
@@ -1926,25 +1978,25 @@ namespace proxyServer
                 if (ch)
                 {
                     logger.Log("SSL Certification Manager started", VLogger.LogLevel.service);
-                    CertMod.started = true;
+                    CertMod.Started = true;
                 }
                 else
                 {
                     logger.Log("SSL Certification Manager disabled", VLogger.LogLevel.service);
-                    CertMod.started = false;
+                    CertMod.Started = false;
                 }
             }
             else if (command == "sslcert_manager")
             {
-                if (!CertMod.started)
+                if (!CertMod.Started)
                 {
                     CertMod.WarningMessage();
                     return;
                 }
-                CertMod.pRestore = console.GetPrompt();
+                CertMod.PRestore = console.GetPrompt();
                 console.SetPrompt("/proxyServer/certManager>");
                 console.SetInteractiveGroup("ig.ssl");
-                CertMod.selfInteractive = true;
+                CertMod.SelfInteractive = true;
                 console.Clear();
             }
             else if (command.StartsWith("set mode "))
@@ -1983,25 +2035,25 @@ namespace proxyServer
                 if (ch)
                 {
                     logger.Log("Dump manager started!", VLogger.LogLevel.service);
-                    DumpMod.started = true;
+                    DumpMod.Started = true;
                 }
                 else
                 {
                     logger.Log("Dump manager disabled!", VLogger.LogLevel.service);
-                    DumpMod.started = false;
+                    DumpMod.Started = false;
                 }
             }
             else if (command == "dump_manager")
             {
-                if (!DumpMod.started)
+                if (!DumpMod.Started)
                 {
                     DumpMod.WarningMessage();
                     return;
                 }
 
-                DumpMod.pRestore = console.GetPrompt();
+                DumpMod.PRestore = console.GetPrompt();
                 console.SetPrompt("/proxyServer/dumpManager>");
-                DumpMod.selfInteractive = true;
+                DumpMod.SelfInteractive = true;
                 console.Clear();
                 console.SetInteractiveGroup("ig.dump");
             }
@@ -2012,24 +2064,24 @@ namespace proxyServer
                 if (ch)
                 {
                     logger.Log("Regular Expression Manager Started", VLogger.LogLevel.service);
-                    RegMod.started = true;
+                    RegMod.Started = true;
                 }
                 else
                 {
                     logger.Log("Regular Expression Manager Stopped", VLogger.LogLevel.service);
-                    RegMod.started = false;
+                    RegMod.Started = false;
                 }
             }
             else if (command == "regex_manager")
             {
-                if (!RegMod.started)
+                if (!RegMod.Started)
                 {
                     RegMod.WarningMessage();
                     return;
                 }
 
-                RegMod.selfInteractive = true;
-                RegMod.pRestore = console.GetPrompt();
+                RegMod.SelfInteractive = true;
+                RegMod.PRestore = console.GetPrompt();
                 console.SetPrompt("/proxyServer/regex_manager>");
                 console.SetInteractiveGroup("ig.regex");
                 console.Clear();
@@ -2096,8 +2148,8 @@ namespace proxyServer
 
     interface IFilter
     {
-        Dictionary<string, object> filterName { get; set; }
-        VFilter manager { get; set; }
+        Dictionary<string, object> FilterName { get; set; }
+        VFilter Manager { get; set; }
         bool BindFilter(string filterName, object value);
         bool UnBindFilter(string filterName);
         bool SearchFilter(string sMethod, object sparam, string input);
@@ -2110,9 +2162,9 @@ namespace proxyServer
 
     interface IService
     {
-        bool started { get; set; }
-        bool selfInteractive { get; set; }
-        string pRestore { get; set; }
+        bool Started { get; set; }
+        bool SelfInteractive { get; set; }
+        string PRestore { get; set; }
         void WarningMessage();
     }
 
@@ -2351,11 +2403,13 @@ namespace proxyServer
         public void CreateInteractive(string group, string explanation, InteractiveLevel level = InteractiveLevel.Normal)
         {
             if (iGuide.ContainsKey(group)) return;
-            InteractiveHelp ih = new InteractiveHelp();
-            ih.level = level;
-            ih.messages = new List<string>();
-            ih.idle = new List<int>();
-            ih.triggerNext = new List<Func<bool>>();
+            InteractiveHelp ih = new InteractiveHelp
+            {
+                level = level,
+                messages = new List<string>(),
+                idle = new List<int>(),
+                triggerNext = new List<Func<bool>>()
+            };
             iGuide.Add(group, ih);
             exp.Add(explanation);
         }
@@ -2627,13 +2681,15 @@ namespace proxyServer
             string key = kvp.Key.ToLower();
             string value = kvp.Value.ToLower();
 
-            if (key == "state") started = (value == "true") ? true : false;
+            if (key == "state") Started = (value == "true") ? true : false;
             if (key == "def_name")
             {
                 if (!_list.ContainsKey(kvp.Value))
                 {
-                    RegList rl = new RegList();
-                    rl.list = new List<Regex>();
+                    RegList rl = new RegList
+                    {
+                        list = new List<Regex>()
+                    };
                     _list.Add(kvp.Value, rl);
                 }
             }
@@ -2643,8 +2699,10 @@ namespace proxyServer
                 string entryValue = kvp.Value;
                 if (!_list.ContainsKey(entryName))
                 {
-                    RegList rl = new RegList();
-                    rl.list = new List<Regex>();
+                    RegList rl = new RegList
+                    {
+                        list = new List<Regex>()
+                    };
                     _list.Add(entryName, rl);
                 }
 
@@ -2659,7 +2717,7 @@ namespace proxyServer
         {
             xml.WriteStartElement("settings_start");
 
-            xml.WriteElementString("state", (started) ? "true" : "false");
+            xml.WriteElementString("state", (Started) ? "true" : "false");
 
             foreach (KeyValuePair<string, RegList> kvp in _list)
             {
@@ -2682,9 +2740,9 @@ namespace proxyServer
         private string _pRestore = "";
         private bool _selfInteractive = false;
 
-        public bool selfInteractive { get { return _selfInteractive; } set { _selfInteractive = value; }  }
-        public bool started { get { return _started; } set { _started = value; } }
-        public string pRestore { get { return _pRestore; } set { _pRestore = value; } }
+        public bool SelfInteractive { get { return _selfInteractive; } set { _selfInteractive = value; }  }
+        public bool Started { get { return _started; } set { _started = value; } }
+        public string PRestore { get { return _pRestore; } set { _pRestore = value; } }
 
         public void WarningMessage()
         {
@@ -2709,8 +2767,10 @@ namespace proxyServer
         public bool Add(string groupName)
         {
             if (_list.ContainsKey(groupName)) return false;
-            RegList rl = new RegList();
-            rl.list = new List<Regex>();
+            RegList rl = new RegList
+            {
+                list = new List<Regex>()
+            };
             _list.Add(groupName, rl);
 
             return true;
@@ -3052,13 +3112,13 @@ namespace proxyServer
         private Dictionary<string, object> filterNames = new Dictionary<string, object>();
         private VFilter _vfmanager;
 
-        public Dictionary<string, object> filterName
+        public Dictionary<string, object> FilterName
         {
             get { return filterNames; }
             set { filterNames = value; }
         }
 
-        public VFilter manager
+        public VFilter Manager
         {
             get { return _vfmanager; }
             set { _vfmanager = value; }
@@ -3120,11 +3180,11 @@ namespace proxyServer
 
             if (sMethod == "and")
             {
-                return manager.RunAllCompareAnd(targetFilterName, input);
+                return Manager.RunAllCompareAnd(targetFilterName, input);
             }
             else if (sMethod == "or")
             {
-                return manager.RunAllCompareOr(targetFilterName, input);
+                return Manager.RunAllCompareOr(targetFilterName, input);
             }
             else
             {
@@ -3135,8 +3195,8 @@ namespace proxyServer
 
         public bool UnBindFilter(string validFilterName)
         {
-            if (!filterName.ContainsKey(validFilterName)) return false;
-            filterName.Remove(validFilterName);
+            if (!FilterName.ContainsKey(validFilterName)) return false;
+            FilterName.Remove(validFilterName);
             return true;
         }
 
@@ -3153,7 +3213,7 @@ namespace proxyServer
 
         public void SetManager(VFilter fman)
         {
-            manager = fman;
+            Manager = fman;
         }
 
         //Main inject class
@@ -3200,7 +3260,7 @@ namespace proxyServer
         {
             console = con;
             reg = rx;
-            dw.AddCondition(() => mitm.CheckServiceState(VMitm.InjectServices.AutoInjection) && autoPayload == "", ctx.CreateLog("Auto inujection is enabled, but no payload is set", VLogger.LogLevel.warning));
+            dw.AddCondition(() => mitm.CheckServiceState(VMitm.InjectServices.AutoInjection) && autoPayload == "", ctx.CreateLog("Auto injection is enabled, but no payload is set", VLogger.LogLevel.warning));
             dw.AddCondition(() => mitm.CheckServiceState(VMitm.InjectServices.MatchInjection) && payloadReplace.Count == 0, ctx.CreateLog("Match Injection is enabled, but no payload is set", VLogger.LogLevel.warning));
             dw.AddCondition(() => mitm.CheckServiceState(VMitm.InjectServices.MediaInjection) && mediaReplace.Count == 0, ctx.CreateLog("Media Injection is enabled, but no file is set", VLogger.LogLevel.warning));
             dw.AddCondition(() => !mitm.IsAllOfflineI() && !mitm.started, ctx.CreateLog("One or more injection service is enabled, but mitm service is not running!", VLogger.LogLevel.warning));
@@ -3278,8 +3338,8 @@ namespace proxyServer
                     bool isAndEmpty = false;
                     string andName = GetFilterByParam("inject_and");
                     string orName = GetFilterByParam("inject_or");
-                    isOrEmpty = manager.IsFilterEmpty(orName);
-                    isAndEmpty = manager.IsFilterEmpty(andName);
+                    isOrEmpty = Manager.IsFilterEmpty(orName);
+                    isAndEmpty = Manager.IsFilterEmpty(andName);
                     bool result = false;
 
                     if (!isOrEmpty && !isAndEmpty)
@@ -3426,7 +3486,7 @@ namespace proxyServer
             foreach (string fname in mediaReplace.Keys)
             {
                 string mode = (fname.Contains("or")) ? "or" : "and";
-                bool result = (mode == "and") ? manager.RunAllCompareAnd(fname, targetFile) : manager.RunAllCompareOr(fname, targetFile);
+                bool result = (mode == "and") ? Manager.RunAllCompareAnd(fname, targetFile) : Manager.RunAllCompareOr(fname, targetFile);
                 if (result)
                 {
                     canContinue = true;
@@ -3444,12 +3504,14 @@ namespace proxyServer
             {
                 try
                 {
-                    WebClient wc = new WebClient();
-                    wc.Proxy = null;
+                    WebClient wc = new WebClient
+                    {
+                        Proxy = null
+                    };
                     byte[] file = wc.DownloadData(newFile);
                     return file;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     console.Debug("Web Image Inject failed!");
                     return null;
@@ -4234,7 +4296,7 @@ namespace proxyServer
             string key = kvp.Key.ToLower();
             string value = kvp.Value.ToLower();
 
-            if (key == "state") started = (value == "true") ? true : false;
+            if (key == "state") Started = (value == "true") ? true : false;
             if (key == "dumper_file") dumpFiles.Add(kvp.Value);
             if (key == "dumper_fname") fName.Add(kvp.Value);
         }
@@ -4243,7 +4305,7 @@ namespace proxyServer
         {
             xml.WriteStartElement("settings_start");
             xml.WriteStartElement("dumper");
-            xml.WriteElementString("state", (started) ? "true" : "false");
+            xml.WriteElementString("state", (Started) ? "true" : "false");
 
             foreach (string file in dumpFiles)
             {
@@ -4264,9 +4326,9 @@ namespace proxyServer
         private bool _selfInteractive = false;
         private string _pRestore = "";
 
-        public bool started { get { return _started; } set { _started = value; } }
-        public bool selfInteractive { get { return _selfInteractive; } set { _selfInteractive = value; } }
-        public string pRestore { get { return _pRestore; } set { _pRestore = value; } }
+        public bool Started { get { return _started; } set { _started = value; } }
+        public bool SelfInteractive { get { return _selfInteractive; } set { _selfInteractive = value; } }
+        public string PRestore { get { return _pRestore; } set { _pRestore = value; } }
 
         public void WarningMessage()
         {
@@ -4278,13 +4340,13 @@ namespace proxyServer
         private Dictionary<string, object> filterNames = new Dictionary<string, object>();
         private VFilter _vfmanager;
 
-        public Dictionary<string, object> filterName
+        public Dictionary<string, object> FilterName
         {
             get { return filterNames; }
             set { filterNames = value; }
         }
 
-        public VFilter manager
+        public VFilter Manager
         {
             get { return _vfmanager; }
             set { _vfmanager = value; }
@@ -4347,11 +4409,11 @@ namespace proxyServer
 
             if (sMethod == "and")
             {
-                return manager.RunAllCompareAnd(targetFilterName, input);
+                return Manager.RunAllCompareAnd(targetFilterName, input);
             }
             else if (sMethod == "or")
             {
-                return manager.RunAllCompareOr(targetFilterName, input);
+                return Manager.RunAllCompareOr(targetFilterName, input);
             }
             else
             {
@@ -4362,8 +4424,8 @@ namespace proxyServer
 
         public bool UnBindFilter(string validFilterName)
         {
-            if (!filterName.ContainsKey(validFilterName)) return false;
-            filterName.Remove(validFilterName);
+            if (!FilterName.ContainsKey(validFilterName)) return false;
+            FilterName.Remove(validFilterName);
             return true;
         }
 
@@ -4380,7 +4442,7 @@ namespace proxyServer
 
         public void SetManager(VFilter fman)
         {
-            manager = fman;
+            Manager = fman;
         }
 
         //Main Dumper Class
@@ -4440,7 +4502,7 @@ namespace proxyServer
 
             if (!File.Exists(fileName))
             {
-                using (FileStream fs = File.Create(fileName)) ;
+                File.Create(fileName).Close();
                 dumpFiles.Add(fileName);
                 if (fName != null)
                 {
@@ -4587,7 +4649,7 @@ namespace proxyServer
 
         private void LDump(string text, string lFile)
         {
-            if (!started) return;
+            if (!Started) return;
             int findex = GetFileIndex(lFile);
             if (filterNames.Count > 0)
             {
@@ -4654,7 +4716,6 @@ namespace proxyServer
             if (disposing)
             {
                 handle.Dispose();
-                host = null;
                 ctx = null;
                 certman = null;
                 Close();
@@ -4662,19 +4723,16 @@ namespace proxyServer
                 Array.Clear(buffer, 0, buffer.Length);
                 buffer = null;
                 console = null;
-                tunnel = null;
             }
 
             disposed = true;
         }
 
-        private string host = "";
         private Form1 ctx;
         private VSslCertification certman;
         private SslStream _ssl;
         private byte[] buffer = new byte[2048];
         private VConsole console;
-        public Tunnel tunnel;
 
         public VSslHandler(Form1 context, VConsole con)
         {
@@ -4697,16 +4755,12 @@ namespace proxyServer
 
         public Error InitSslStream(NetworkStream ns, string targetHost)
         {
-            host = targetHost;
             SslStream ssl = new SslStream(ns);
             certman = ctx.CertMod;
-            if (certman == null || !certman.started) return Error.CertificateManagerNotAvailable;
-
-            X509Certificate2 cert = certman.GetCert();
-            bool cgResult = true;
-            if (cert == null && certman.AutoGenerate) cgResult = certman.GenerateCertificate("auto-generated-" + DateTime.Now.Year + "-" + DateTime.Now.Month + "-" + DateTime.Now.Day);
-            if (!cgResult) return Error.CertAutoGenerationFailed;
-            cert = certman.GetCert();
+            if (certman == null || !certman.Started) return Error.CertificateManagerNotAvailable;
+            X509Certificate2 cert = certman.GetCert(targetHost);
+            if (cert == null) certman.BCGenerateCertificate(targetHost);
+            cert = certman.GetCert(targetHost);
             if (cert == null) return Error.CertRetrieveFailed;
             SslProtocols sp = certman.GetProtocols();
             if (sp == SslProtocols.None) return Error.SslProtocolRetrieveFailed;
@@ -4719,43 +4773,19 @@ namespace proxyServer
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
+                ctx.LogMod.Log("SSL Server Init Error:\r\n" + ex.ToString(), VLogger.LogLevel.error);
                 return Error.SslServerAuthFailed;
             }
         }
 
-        public byte[] ReadSslStream()
-        {
-            BinaryReader br = new BinaryReader(_ssl);
-            byte[] xBuffer = new byte[2048];
-            byte[] tempBuf = null;
-
-            while (true)
-            {
-                int bytesRead = br.Read(xBuffer, 0, xBuffer.Length);
-                if (bytesRead == 0) break;
-                if (tempBuf == null)
-                {
-                    tempBuf = new byte[bytesRead];
-                    Array.Copy(xBuffer, tempBuf, bytesRead);
-                }
-                else
-                {
-                    byte[] tBuf = new byte[tempBuf.Length];
-                    Array.Copy(tempBuf, tBuf, tempBuf.Length);
-                    tempBuf = new byte[tBuf.Length + bytesRead];
-                    Array.Copy(tBuf, tempBuf, tBuf.Length);
-                    Array.ConstrainedCopy(xBuffer, 0, tempBuf, tBuf.Length, bytesRead);
-                }
-            }
-
-            return tempBuf;
-        }
-
         public void InitAsyncRead()
         {
-            ReadObj r = new ReadObj();
-            r.full = "";
-            r.r = null;
+            ReadObj r = new ReadObj
+            {
+                full = "",
+                r = null,
+                requestHandled = false
+            };
             _ssl.BeginRead(buffer, 0, buffer.Length, new AsyncCallback(ReadFromStream), r);
         }
 
@@ -4789,6 +4819,7 @@ namespace proxyServer
         {
             public string full;
             public Request r;
+            public bool requestHandled;
         }
 
         private void ReadFromStream(IAsyncResult ar)
@@ -4801,22 +4832,21 @@ namespace proxyServer
             byte[] read = new byte[bytesRead];
             Array.Copy(buffer, read, bytesRead);
             string text = Encoding.ASCII.GetString(read);
-            //if (bytesRead > 0) console.Debug(text);
+
             if (bytesRead > 0)
             {
                 if (r == null)
                 {
-                    r = new Request(text, console, true);
+                    r = new Request(text, true);
                 }
-                console.Debug(text);
-                //if (r.bogus) ctx.LogMod.Log("SSL Request is bogus", VLogger.LogLevel.error);
+                
                 if (r.notEnded)
                 {
                     if (ro.full == "") ro.full = text;
                     else
                     {
                         ro.full += text;
-                        r = new Request(ro.full, console, true);
+                        r = new Request(ro.full, true);
                     }
                 }
 
@@ -4827,17 +4857,25 @@ namespace proxyServer
                         ctx.mitmHttp.DumpRequest(r);
                     }
 
-                    tunnel.Send(r.Deserialize());
+                    string requestString = r.Deserialize();
+
+                    Tunnel.Send(requestString, Tunnel.Mode.HTTPs, ctx, r, null, this);
                     ro.full = "";
+                    ro.requestHandled = true;
                 }
             }
 
             Array.Clear(buffer, 0, buffer.Length);
-            ro.r = r;
+            if (!ro.requestHandled) ro.r = r;
+            else
+            {
+                ro.r = null;
+                ro.requestHandled = false;
+            }
             try { _ssl.BeginRead(buffer, 0, buffer.Length, new AsyncCallback(ReadFromStream), ro); }
             catch (Exception ex)
             {
-                Console.WriteLine("Ssl stream error MITM\r\n" + ex.Message);
+                //ctx.LogMod.Log("Ssl stream error MITM\r\n" + ex.Message, VLogger.LogLevel.error);
                 Console.WriteLine("St: " + ex.StackTrace);
             }
         }
@@ -4864,7 +4902,6 @@ namespace proxyServer
                 handle.Dispose();
                 _helpFile = null;
                 _pRestore = null;
-                CertFile = null;
                 logger = null;
                 if (SslProt != null) Array.Clear(SslProt, 0, SslProt.Length);
                 SslProt = null;
@@ -4894,8 +4931,8 @@ namespace proxyServer
         {
             string key = kvp.Key.ToLower();
             string value = kvp.Value.ToLower();
-            if (key == "state") started = (value == "true") ? true : false;
-            if (key == "file_path") SetFile(kvp.Value);
+            if (key == "state") Started = (value == "true") ? true : false;
+            if (key == "use_ca") UseCASign = (value == "true") ? true : false;
             if (key == "protocols") SetProtocols(StringToProtocols(value));
             if (key == "state_autogen") AutoGenerate = (value == "true") ? true : false;
         }
@@ -4903,8 +4940,8 @@ namespace proxyServer
         public void WriteSettings(System.Xml.XmlWriter xml)
         {
             xml.WriteStartElement("settings_start");
-            xml.WriteElementString("state", (started) ? "true" : "false");
-            xml.WriteElementString("file_path", CertFile);
+            xml.WriteElementString("state", (Started) ? "true" : "false");
+            xml.WriteElementString("use_ca", (UseCASign) ? "true" : "false");
             if (SslProt.Length > 0) xml.WriteElementString("protocols", ProtocolToString());
             xml.WriteElementString("state_autogen", (AutoGenerate) ? "true" : "false");
             xml.WriteEndElement();
@@ -4916,19 +4953,19 @@ namespace proxyServer
         private bool _selfInteractive = false;
         private string _pRestore = "";
 
-        public bool started
+        public bool Started
         {
             get { return _started; }
             set { _started = value; }
         }
 
-        public bool selfInteractive
+        public bool SelfInteractive
         {
             get { return _selfInteractive; }
             set { _selfInteractive = value; }
         }
 
-        public string pRestore
+        public string PRestore
         {
             get { return _pRestore; }
             set { _pRestore = value; }
@@ -4942,42 +4979,358 @@ namespace proxyServer
 
         //Main SSL Cert class
 
-        public string CertFile { get; private set; } = "";
         private VLogger logger;
         private SslProtObj[] SslProt;
         private static VSslCertification self;
-        public bool AutoGenerate = false;
+        public bool AutoGenerate = true;
+        public bool UseCASign = false;
         private VConsole console;
+
+        //https://github.com/rlipscombe/bouncy-castle-csharp
+        //Blog Site: http://blog.differentpla.net/blog/2013/03/24/bouncy-castle-being-a-certificate-authority
+        public class CertificateGenerator
+        {
+            public static X509Certificate2 LoadCertificate(string issuerFileName, string password)
+            {
+                // We need to pass 'Exportable', otherwise we can't get the private key.
+                var issuerCertificate = new X509Certificate2(issuerFileName, password, X509KeyStorageFlags.Exportable);
+                return issuerCertificate;
+            }
+
+            public static X509Certificate2 IssueCertificate(string subjectName, X509Certificate2 issuerCertificate, string[] subjectAlternativeNames, KeyPurposeID[] usages)
+            {
+                // It's self-signed, so these are the same.
+                var issuerName = issuerCertificate.Subject;
+
+                var random = GetSecureRandom();
+                var subjectKeyPair = GenerateKeyPair(random, 2048);
+
+                var issuerKeyPair = DotNetUtilities.GetKeyPair(issuerCertificate.PrivateKey);
+
+                var serialNumber = GenerateSerialNumber(random);
+                var issuerSerialNumber = new BigInteger(issuerCertificate.GetSerialNumber());
+
+                const bool isCertificateAuthority = false;
+                var certificate = GenerateCertificate(random, subjectName, subjectKeyPair, serialNumber,
+                                                      subjectAlternativeNames, issuerName, issuerKeyPair,
+                                                      issuerSerialNumber, isCertificateAuthority,
+                                                      usages);
+                return ConvertCertificate(certificate, subjectKeyPair, random);
+            }
+
+            public static X509Certificate2 CreateCertificateAuthorityCertificate(string subjectName, string[] subjectAlternativeNames, KeyPurposeID[] usages)
+            {
+                // It's self-signed, so these are the same.
+                var issuerName = subjectName;
+
+                var random = GetSecureRandom();
+                var subjectKeyPair = GenerateKeyPair(random, 2048);
+
+                // It's self-signed, so these are the same.
+                var issuerKeyPair = subjectKeyPair;
+
+                var serialNumber = GenerateSerialNumber(random);
+                var issuerSerialNumber = serialNumber; // Self-signed, so it's the same serial number.
+
+                const bool isCertificateAuthority = true;
+                var certificate = GenerateCertificate(random, subjectName, subjectKeyPair, serialNumber,
+                                                      subjectAlternativeNames, issuerName, issuerKeyPair,
+                                                      issuerSerialNumber, isCertificateAuthority,
+                                                      usages);
+                return ConvertCertificate(certificate, subjectKeyPair, random);
+            }
+
+            public static X509Certificate2 CreateSelfSignedCertificate(string subjectName, string[] subjectAlternativeNames, KeyPurposeID[] usages)
+            {
+                // It's self-signed, so these are the same.
+                var issuerName = subjectName;
+
+                var random = GetSecureRandom();
+                var subjectKeyPair = GenerateKeyPair(random, 2048);
+
+                // It's self-signed, so these are the same.
+                var issuerKeyPair = subjectKeyPair;
+
+                var serialNumber = GenerateSerialNumber(random);
+                var issuerSerialNumber = serialNumber; // Self-signed, so it's the same serial number.
+
+                const bool isCertificateAuthority = false;
+                var certificate = GenerateCertificate(random, subjectName, subjectKeyPair, serialNumber,
+                                                      subjectAlternativeNames, issuerName, issuerKeyPair,
+                                                      issuerSerialNumber, isCertificateAuthority,
+                                                      usages);
+                return ConvertCertificate(certificate, subjectKeyPair, random);
+            }
+
+            public static SecureRandom GetSecureRandom()
+            {
+                // Since we're on Windows, we'll use the CryptoAPI one (on the assumption
+                // that it might have access to better sources of entropy than the built-in
+                // Bouncy Castle ones):
+                var randomGenerator = new CryptoApiRandomGenerator();
+                var random = new SecureRandom(randomGenerator);
+                return random;
+            }
+
+            public static Org.BouncyCastle.X509.X509Certificate GenerateCertificate(SecureRandom random,
+                                                               string subjectName,
+                                                               AsymmetricCipherKeyPair subjectKeyPair,
+                                                               BigInteger subjectSerialNumber,
+                                                               string[] subjectAlternativeNames,
+                                                               string issuerName,
+                                                               AsymmetricCipherKeyPair issuerKeyPair,
+                                                               BigInteger issuerSerialNumber,
+                                                               bool isCertificateAuthority,
+                                                               KeyPurposeID[] usages)
+            {
+                var certificateGenerator = new X509V3CertificateGenerator();
+
+                certificateGenerator.SetSerialNumber(subjectSerialNumber);
+
+                // Set the signature algorithm. This is used to generate the thumbprint which is then signed
+                // with the issuer's private key. We'll use SHA-256, which is (currently) considered fairly strong.
+                const string signatureAlgorithm = "SHA256WithRSA";
+#pragma warning disable CS0618 // Type or member is obsolete
+                certificateGenerator.SetSignatureAlgorithm(signatureAlgorithm);
+#pragma warning restore CS0618 // Type or member is obsolete
+
+                var issuerDN = new X509Name("CN=" + issuerName);
+                certificateGenerator.SetIssuerDN(issuerDN);
+
+                // Note: The subject can be omitted if you specify a subject alternative name (SAN).
+                var subjectDN = new X509Name("CN=" + subjectName);
+                certificateGenerator.SetSubjectDN(subjectDN);
+
+                // Our certificate needs valid from/to values.
+                var notBefore = DateTime.UtcNow.Date;
+                var notAfter = notBefore.AddYears(2);
+
+                certificateGenerator.SetNotBefore(notBefore);
+                certificateGenerator.SetNotAfter(notAfter);
+
+                // The subject's public key goes in the certificate.
+                certificateGenerator.SetPublicKey(subjectKeyPair.Public);
+
+                AddAuthorityKeyIdentifier(certificateGenerator, issuerDN, issuerKeyPair, issuerSerialNumber);
+                AddSubjectKeyIdentifier(certificateGenerator, subjectKeyPair);
+                AddBasicConstraints(certificateGenerator, isCertificateAuthority);
+
+                if (usages != null && usages.Any())
+                    AddExtendedKeyUsage(certificateGenerator, usages);
+
+                if (subjectAlternativeNames != null && subjectAlternativeNames.Any())
+                    AddSubjectAlternativeNames(certificateGenerator, subjectAlternativeNames);
+
+                // The certificate is signed with the issuer's private key.
+#pragma warning disable CS0618 // Type or member is obsolete
+                var certificate = certificateGenerator.Generate(issuerKeyPair.Private, random);
+#pragma warning restore CS0618 // Type or member is obsolete
+                return certificate;
+            }
+
+            /// <summary>
+            /// The certificate needs a serial number. This is used for revocation,
+            /// and usually should be an incrementing index (which makes it easier to revoke a range of certificates).
+            /// Since we don't have anywhere to store the incrementing index, we can just use a random number.
+            /// </summary>
+            /// <param name="random"></param>
+            /// <returns></returns>
+            public static BigInteger GenerateSerialNumber(SecureRandom random)
+            {
+                var serialNumber =
+                    BigIntegers.CreateRandomInRange(
+                        BigInteger.One, BigInteger.ValueOf(Int64.MaxValue), random);
+                return serialNumber;
+            }
+
+            /// <summary>
+            /// Generate a key pair.
+            /// </summary>
+            /// <param name="random">The random number generator.</param>
+            /// <param name="strength">The key length in bits. For RSA, 2048 bits should be considered the minimum acceptable these days.</param>
+            /// <returns></returns>
+            public static AsymmetricCipherKeyPair GenerateKeyPair(SecureRandom random, int strength)
+            {
+                var keyGenerationParameters = new KeyGenerationParameters(random, strength);
+
+                var keyPairGenerator = new RsaKeyPairGenerator();
+                keyPairGenerator.Init(keyGenerationParameters);
+                var subjectKeyPair = keyPairGenerator.GenerateKeyPair();
+                return subjectKeyPair;
+            }
+
+            /// <summary>
+            /// Add the Authority Key Identifier. According to http://www.alvestrand.no/objectid/2.5.29.35.html, this
+            /// identifies the public key to be used to verify the signature on this certificate.
+            /// In a certificate chain, this corresponds to the "Subject Key Identifier" on the *issuer* certificate.
+            /// The Bouncy Castle documentation, at http://www.bouncycastle.org/wiki/display/JA1/X.509+Public+Key+Certificate+and+Certification+Request+Generation,
+            /// shows how to create this from the issuing certificate. Since we're creating a self-signed certificate, we have to do this slightly differently.
+            /// </summary>
+            /// <param name="certificateGenerator"></param>
+            /// <param name="issuerDN"></param>
+            /// <param name="issuerKeyPair"></param>
+            /// <param name="issuerSerialNumber"></param>
+            public static void AddAuthorityKeyIdentifier(X509V3CertificateGenerator certificateGenerator,
+                                                          X509Name issuerDN,
+                                                          AsymmetricCipherKeyPair issuerKeyPair,
+                                                          BigInteger issuerSerialNumber)
+            {
+                var authorityKeyIdentifierExtension =
+                    new AuthorityKeyIdentifier(
+                        SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(issuerKeyPair.Public),
+                        new GeneralNames(new GeneralName(issuerDN)),
+                        issuerSerialNumber);
+                certificateGenerator.AddExtension(
+                    X509Extensions.AuthorityKeyIdentifier.Id, false, authorityKeyIdentifierExtension);
+            }
+
+            /// <summary>
+            /// Add the "Subject Alternative Names" extension. Note that you have to repeat
+            /// the value from the "Subject Name" property.
+            /// </summary>
+            /// <param name="certificateGenerator"></param>
+            /// <param name="subjectAlternativeNames"></param>
+            public static void AddSubjectAlternativeNames(X509V3CertificateGenerator certificateGenerator,
+                                                           IEnumerable<string> subjectAlternativeNames)
+            {
+                var subjectAlternativeNamesExtension =
+                    new DerSequence(
+                        subjectAlternativeNames.Select(name => new GeneralName(GeneralName.DnsName, name))
+                                               .ToArray<Asn1Encodable>());
+
+                certificateGenerator.AddExtension(
+                    X509Extensions.SubjectAlternativeName.Id, false, subjectAlternativeNamesExtension);
+            }
+
+            /// <summary>
+            /// Add the "Extended Key Usage" extension, specifying (for example) "server authentication".
+            /// </summary>
+            /// <param name="certificateGenerator"></param>
+            /// <param name="usages"></param>
+            private static void AddExtendedKeyUsage(X509V3CertificateGenerator certificateGenerator, KeyPurposeID[] usages)
+            {
+                certificateGenerator.AddExtension(
+                    X509Extensions.ExtendedKeyUsage.Id, false, new ExtendedKeyUsage(usages));
+            }
+
+            /// <summary>
+            /// Add the "Basic Constraints" extension.
+            /// </summary>
+            /// <param name="certificateGenerator"></param>
+            /// <param name="isCertificateAuthority"></param>
+            public static void AddBasicConstraints(X509V3CertificateGenerator certificateGenerator,
+                                                    bool isCertificateAuthority)
+            {
+                certificateGenerator.AddExtension(
+                    X509Extensions.BasicConstraints.Id, true, new BasicConstraints(isCertificateAuthority));
+            }
+
+            /// <summary>
+            /// Add the Subject Key Identifier.
+            /// </summary>
+            /// <param name="certificateGenerator"></param>
+            /// <param name="subjectKeyPair"></param>
+            public static void AddSubjectKeyIdentifier(X509V3CertificateGenerator certificateGenerator,
+                                                        AsymmetricCipherKeyPair subjectKeyPair)
+            {
+                var subjectKeyIdentifierExtension =
+                    new SubjectKeyIdentifier(
+                        SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(subjectKeyPair.Public));
+                certificateGenerator.AddExtension(
+                    X509Extensions.SubjectKeyIdentifier.Id, false, subjectKeyIdentifierExtension);
+            }
+
+            public static X509Certificate2 ConvertCertificate(Org.BouncyCastle.X509.X509Certificate certificate,
+                                                               AsymmetricCipherKeyPair subjectKeyPair,
+                                                               SecureRandom random)
+            {
+                // Now to convert the Bouncy Castle certificate to a .NET certificate.
+                // See http://web.archive.org/web/20100504192226/http://www.fkollmann.de/v2/post/Creating-certificates-using-BouncyCastle.aspx
+                // ...but, basically, we create a PKCS12 store (a .PFX file) in memory, and add the public and private key to that.
+                var store = new Pkcs12Store();
+
+                // What Bouncy Castle calls "alias" is the same as what Windows terms the "friendly name".
+                string friendlyName = certificate.SubjectDN.ToString();
+
+                // Add the certificate.
+                var certificateEntry = new X509CertificateEntry(certificate);
+                store.SetCertificateEntry(friendlyName, certificateEntry);
+
+                // Add the private key.
+                store.SetKeyEntry(friendlyName, new AsymmetricKeyEntry(subjectKeyPair.Private), new[] { certificateEntry });
+
+                // Convert it to an X509Certificate2 object by saving/loading it from a MemoryStream.
+                // It needs a password. Since we'll remove this later, it doesn't particularly matter what we use.
+                const string password = "password";
+                var stream = new MemoryStream();
+                store.Save(stream, password.ToCharArray(), random);
+
+                var convertedCertificate =
+                    new X509Certificate2(stream.ToArray(),
+                                         password,
+                                         X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+                return convertedCertificate;
+            }
+
+            public static void WriteCertificate(X509Certificate2 certificate, string outputFileName)
+            {
+                // This password is the one attached to the PFX file. Use 'null' for no password.
+                const string password = "password";
+                var bytes = certificate.Export(X509ContentType.Pfx, password);
+                File.WriteAllBytes(outputFileName, bytes);
+            }
+        }
 
         public struct SslProtObj
         {
             public SslProtocols sslProt;
         }
 
-        public VSslCertification(VLogger log, VConsole con)
+        public VSslCertification(VLogger log, VConsole con, VDependencyWatcher vdw)
         {
             logger = log;
             console = con;
             self = this;
+            vdw.AddCondition(() => { return UseCASign && !File.Exists("certs\\AHROOT.pfx"); }, new VLogger.LogObj() {ll = VLogger.LogLevel.warning,
+            message = "CA Signing is enabled, but the root CA Cert is not found at its location"});
         }
 
-        public bool SetFile(string filePath)
+        public void Init()
         {
-            if (File.Exists(filePath))
+            if (!Directory.Exists("certs")) Directory.CreateDirectory("certs");
+        }
+
+        public bool GetCert()
+        {
+            string toCheck = "";
+            if (UseCASign) toCheck = "certs\\AHROOT.pfx";
+            else toCheck = "certs\\general.xcer";
+            if (!File.Exists(toCheck)) return false;
+            X509Certificate2 c;
+            if (toCheck.EndsWith(".xcer")) c = new X509Certificate2(toCheck);
+            else c = new X509Certificate2(toCheck, "password");
+            return true;
+        }
+
+        public X509Certificate2 GetCert(string hostName)
+        {
+            try
             {
-                CertFile = filePath;
-                return true;
+                if (File.Exists("certs\\" + hostName + ".pfx") && UseCASign)
+                {
+                    return new X509Certificate2("certs\\" + hostName + ".pfx", "password");
+                }
+                else if (File.Exists("certs\\general.pfx") && !UseCASign)
+                {
+                    return new X509Certificate2("certs\\general.xcer");
+                }
+                else return null;
             }
-
-            return false;
-            
-        }
-
-        public X509Certificate2 GetCert()
-        {
-            if (CertFile == null || !File.Exists(CertFile)) return null;
-            X509Certificate2 c = new X509Certificate2(CertFile);
-            return c;
+            catch (Exception ex)
+            {
+                logger.Log("Failed to get the certificate:\r\n" + ex.ToString(), VLogger.LogLevel.error);
+                return null;
+            }
         }
 
         private void GenBatch(string mcertCommand)
@@ -4988,37 +5341,61 @@ namespace proxyServer
             batchFile += dLetter + ":" + nl;
             batchFile += mcertCommand + nl;
             batchFile += "echo Operation Completed!";
-            using (FileStream fs = File.Create("gencert.bat")) ;
+            File.Create("gencert.bat").Close();
             File.WriteAllText("gencert.bat", batchFile);
         }
 
-        public bool GenerateCertificate(string filePath, string cn = "ah101", int dataLength = 2048)
+        private bool IsAdmin()
         {
-            string mc = "makecert.exe " + filePath + " -a sha1 -n \"CN = " + cn + "\" -sr LocalMachine -ss My -sky signature -pe -len " + dataLength.ToString();
-            GenBatch(mc);
-            if (!File.Exists("gencert.bat")) return false;
-            if (!File.Exists("makecert.exe")) return false;
-            Process p = new Process();
-            ProcessStartInfo info = new ProcessStartInfo();
-            info.FileName = "gencert.bat";
-            info.WindowStyle = ProcessWindowStyle.Normal;
-            info.WorkingDirectory = Application.StartupPath;
-            info.UseShellExecute = true;
-            info.Verb = "runas"; //only in administrator mode will makecert work
-            p.StartInfo = info;
-            logger.Log("Starting gencert.bat external script\r\nPlease accept the UAC (admin privileges) prompt :) - if needed", VLogger.LogLevel.information);
-            p.Start();
-            p.WaitForExit();
-            logger.Log("gencert.bat external script stopped running", VLogger.LogLevel.information);
-            Thread.Sleep(1000);
-            if (File.Exists(filePath))
+            var identity = System.Security.Principal.WindowsIdentity.GetCurrent(); //Get my identity
+            var principal = new System.Security.Principal.WindowsPrincipal(identity); //Get my principal
+            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator); //Check if i'm an elevated process
+        }
+
+        public void BCGenerateCertificate(string hostName)
+        {
+            if (!File.Exists("certs\\AHROOT.pfx")) return;
+            X509Certificate2 caCert = CertificateGenerator.LoadCertificate("certs\\AHROOT.pfx", "password");
+            X509Certificate2 serverCert = CertificateGenerator.IssueCertificate(hostName, caCert, new string[] { hostName, "*." + hostName }, new KeyPurposeID[] {
+                KeyPurposeID.IdKPServerAuth });
+
+            CertificateGenerator.WriteCertificate(serverCert, "certs\\" + hostName + ".pfx");
+        }
+
+        public bool InstallToTrustedRoot()
+        {
+            const string caCertFile = "certs\\AHROOT.pfx";
+            if (!File.Exists(caCertFile)) return false;
+            X509Certificate2 caCert = CertificateGenerator.LoadCertificate(caCertFile, "password");
+            try
             {
-                logger.Log("Certification Created Successfully!", VLogger.LogLevel.information);
+                X509Store certStore = new X509Store(StoreName.Root, StoreLocation.LocalMachine);
+                certStore.Open(OpenFlags.ReadWrite);
+                certStore.Add(caCert);
+                certStore.Close();
                 return true;
             }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
 
-            logger.Log("Certificate generation failed!", VLogger.LogLevel.error);
-            return false;
+        public bool GenerateCA(string commonName = "ah101CA")
+        {
+            if (!IsAdmin()) return false;
+            X509Certificate2 caCert = CertificateGenerator.CreateCertificateAuthorityCertificate(commonName, null, null);
+            CertificateGenerator.WriteCertificate(caCert, "certs\\AHROOT.pfx");
+            return true;
+        }
+
+        public void GenerateSelfSigned(string commonName = "ah101Signed")
+        {
+            const string outputFile = "certs\\general.pfx";
+
+            X509Certificate2 generalCert = 
+                CertificateGenerator.CreateSelfSignedCertificate(commonName, new string[] { "example.com" }, new KeyPurposeID[] { KeyPurposeID.IdKPServerAuth });
+            CertificateGenerator.WriteCertificate(generalCert, outputFile);
         }
 
         public SslProtocols GetProtocols()
@@ -5044,16 +5421,16 @@ namespace proxyServer
             {
                 SslProtocols prot = po.sslProt;
                 if (prot == SslProtocols.Default) result += "default,";
-                if (prot == SslProtocols.None) result += "none,";
-                if (prot == SslProtocols.Ssl2) result += "sslv2,";
-                if (prot == SslProtocols.Ssl3) result += "sslv3,";
-                if (prot == SslProtocols.Tls) result += "tls,";
-                if (prot == SslProtocols.Tls11) result += "tlsv11,";
-                if (prot == SslProtocols.Tls12) result += "tlsv12,";
+                else if (prot == SslProtocols.None) result += "none,";
+                else if (prot == SslProtocols.Ssl2) result += "sslv2,";
+                else if (prot == SslProtocols.Ssl3) result += "sslv3,";
+                else if (prot == SslProtocols.Tls) result += "tls,";
+                else if (prot == SslProtocols.Tls11) result += "tlsv11,";
+                else result += "tlsv12,";
             }
 
-            if (result == "") result = null;
-            else result.Substring(0, result.Length - 1);
+            if (result == "") return null;
+            else result = result.Substring(0, result.Length - 1);
             return result;
         }
 
@@ -5061,8 +5438,10 @@ namespace proxyServer
         {
             if (input == "" || input == null)
             {
-                SslProtObj poDefault = new SslProtObj();
-                poDefault.sslProt = SslProtocols.None;
+                SslProtObj poDefault = new SslProtObj
+                {
+                    sslProt = SslProtocols.None
+                };
                 return new SslProtObj[] { poDefault };
             }
 
@@ -5078,12 +5457,12 @@ namespace proxyServer
                 if (prot == "") continue;
                 SslProtObj po = new SslProtObj();
                 if (prot == "default") po.sslProt = SslProtocols.Default;
-                if (prot == "none") po.sslProt = SslProtocols.None;
-                if (prot == "sslv2") po.sslProt = SslProtocols.Ssl2;
-                if (prot == "sslv3") po.sslProt = SslProtocols.Ssl3;
-                if (prot == "tls") po.sslProt = SslProtocols.Tls;
-                if (prot == "tlsv11") po.sslProt = SslProtocols.Tls11;
-                if (prot == "tlsv12") po.sslProt = SslProtocols.Tls12;
+                else if (prot == "none") po.sslProt = SslProtocols.None;
+                else if (prot == "sslv2") po.sslProt = SslProtocols.Ssl2;
+                else if (prot == "sslv3") po.sslProt = SslProtocols.Ssl3;
+                else if (prot == "tls") po.sslProt = SslProtocols.Tls;
+                else if (prot == "tlsv11") po.sslProt = SslProtocols.Tls11;
+                else po.sslProt = SslProtocols.Tls12;
                 poList.Add(po);
             }
 
@@ -5093,6 +5472,55 @@ namespace proxyServer
 
     public class VDecoder
     {
+        public byte[] EncodeDeflate(byte[] plainData)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (System.IO.Compression.DeflateStream deflate = new System.IO.Compression.DeflateStream(ms, System.IO.Compression.CompressionMode.Compress, true))
+                {
+                    deflate.Write(plainData, 0, plainData.Length);
+                }
+                return ms.ToArray();
+            }
+        }
+
+        public byte[] DecodeDeflate(byte[] deflateData)
+        {
+            return DecDeflateData(deflateData);
+        }
+
+        public byte[] DecodeBrotli(byte[] brotliData)
+        {
+            byte[] result;
+
+            using (MemoryStream ms = new MemoryStream(brotliData))
+            {
+                using (MemoryStream decoded = new MemoryStream())
+                {
+                    Brotli.BrotliCompression.Decompress(ms, decoded);
+                    result = decoded.ToArray();
+                }
+            }
+
+            return result;
+        }
+
+        public byte[] EncodeBrotli(byte[] plainData)
+        {
+            byte[] result;
+
+            using (MemoryStream ms = new MemoryStream(plainData))
+            {
+                using (MemoryStream encoded = new MemoryStream())
+                {
+                    Brotli.BrotliCompression.Compress(ms, encoded);
+                    result = encoded.ToArray();
+                }
+            }
+
+            return result;
+        }
+
         public string DecodeGzip(byte[] gzipData)
         {
             byte[] result = DecGzipData(gzipData);
@@ -5183,6 +5611,32 @@ namespace proxyServer
             byte[] decoded;
 
             using (System.IO.Compression.GZipStream stream = new System.IO.Compression.GZipStream(new MemoryStream(gzipData), System.IO.Compression.CompressionMode.Decompress))
+            {
+                using (MemoryStream memory = new MemoryStream())
+                {
+                    int count = 0;
+                    do
+                    {
+                        count = stream.Read(bytes, 0, 4096);
+                        if (count > 0)
+                        {
+                            memory.Write(bytes, 0, count);
+                        }
+                    }
+                    while (count > 0);
+                    decoded = memory.ToArray();
+                }
+            }
+
+            return decoded;
+        }
+
+        private byte[] DecDeflateData(byte[] deflateData)
+        {
+            byte[] bytes = new byte[4096];
+            byte[] decoded;
+
+            using (System.IO.Compression.DeflateStream stream = new System.IO.Compression.DeflateStream(new MemoryStream(deflateData), System.IO.Compression.CompressionMode.Decompress))
             {
                 using (MemoryStream memory = new MemoryStream())
                 {
@@ -5390,7 +5844,7 @@ namespace proxyServer
             }
 
             dw = ctx.VdwMod;
-            dw.AddCondition(() => !IsAllOfflineD() && !dump.started, ctx.CreateLog("One or more dump service is active, but Dump Manager is not enabled", VLogger.LogLevel.warning));
+            dw.AddCondition(() => !IsAllOfflineD() && !dump.Started, ctx.CreateLog("One or more dump service is active, but Dump Manager is not enabled", VLogger.LogLevel.warning));
         }
 
         /// <summary>
@@ -5416,7 +5870,7 @@ namespace proxyServer
 
         public void CreateDumps()
         {
-            if (dump != null && dump.started)
+            if (dump != null && dump.Started)
             {
                 if (dump.Dir == "") dump.DefineDirectory(Application.StartupPath + "\\dumps");
                 dump.AddFile("parameter_dump.txt", "mitm_parameter_store", false);
@@ -5476,7 +5930,7 @@ namespace proxyServer
         public String[] CheckDumpers()
         {
             List<string> errors = new List<string>();
-            if (dump == null || !dump.started) errors.Add("Dump manager service is not available");
+            if (dump == null || !dump.Started) errors.Add("Dump manager service is not available");
             if ((CheckServiceState(DumpServices.Cookie) || CheckServiceState(DumpServices.SetCookie)) && !dump.CheckFileByFriendlyName("mitm_cookie_store"))
                 errors.Add("W: Dumpers set to dump cookies, but the store file doesn't exists, or it's not loaded to Dump manager");
             if ((CheckServiceState(DumpServices.GetParameters) || CheckServiceState(DumpServices.PostParameters)) && !dump.CheckFileByFriendlyName("mitm_parameter_store"))
@@ -5755,7 +6209,7 @@ namespace proxyServer
 
         public byte[] MediaRewrite(Response resp, Request req)
         {
-            if (resp.bodyText != "" || resp.fullBytes.Length == 0) return null;
+            if (resp.bodyText != "" || resp.FullBytes.Length == 0) return null;
             if (!resp.headers.ContainsKey("Content-Type")) return null;
             string mime = resp.headers["Content-Type"];
             bool mimeFilter = vf.RunAllCompareOr("mitm_mime_media", mime);
@@ -6135,7 +6589,7 @@ namespace proxyServer
                 filterNames = null;
                 _vfmanager = null;
                 console = null;
-                file = null;
+                File = null;
                 pRestore = null;
             }
 
@@ -6151,7 +6605,7 @@ namespace proxyServer
             get { return _helpFile; }
             set
             {
-                if (File.Exists(value)) _helpFile = value;
+                if (System.IO.File.Exists(value)) _helpFile = value;
             }
         }
 
@@ -6173,7 +6627,7 @@ namespace proxyServer
         {
             xml.WriteStartElement("settings_start");
             xml.WriteElementString("logger_file_state", (printToFile) ? "true" : "false");
-            xml.WriteElementString("logger_file_path", file);
+            xml.WriteElementString("logger_file_path", File);
             xml.WriteElementString("logger_state", (started) ? "true" : "false");
             string loggerRules = RestToString();
             xml.WriteElementString("logger_rest_rules", loggerRules);
@@ -6186,13 +6640,13 @@ namespace proxyServer
         private Dictionary<string, object> filterNames = new Dictionary<string, object>();
         private VFilter _vfmanager;
 
-        public Dictionary<string, object> filterName
+        public Dictionary<string, object> FilterName
         {
             get { return filterNames; }
             set { filterNames = value; }
         }
 
-        public VFilter manager
+        public VFilter Manager
         {
             get { return _vfmanager; }
             set { _vfmanager = value; }
@@ -6255,11 +6709,11 @@ namespace proxyServer
 
             if (sMethod == "and")
             {
-                return manager.RunAllCompareAnd(targetFilterName, input);
+                return Manager.RunAllCompareAnd(targetFilterName, input);
             }
             else if (sMethod == "or")
             {
-                return manager.RunAllCompareOr(targetFilterName, input);
+                return Manager.RunAllCompareOr(targetFilterName, input);
             }
             else
             {
@@ -6270,8 +6724,8 @@ namespace proxyServer
 
         public bool UnBindFilter(string validFilterName)
         {
-            if (!filterName.ContainsKey(validFilterName)) return false;
-            filterName.Remove(validFilterName);
+            if (!FilterName.ContainsKey(validFilterName)) return false;
+            FilterName.Remove(validFilterName);
             return true;
         }
 
@@ -6288,7 +6742,7 @@ namespace proxyServer
 
         public void SetManager(VFilter fman)
         {
-            manager = fman;
+            Manager = fman;
         }
 
         //Main logger class
@@ -6301,7 +6755,7 @@ namespace proxyServer
         bool printService = false;
         public bool printToFile = true;
         public bool started = false;
-        public string file { get; private set; } = "";
+        public string File { get; private set; } = "";
         public string pRestore = "";
         public bool selfInteractive = false;
 
@@ -6374,12 +6828,12 @@ namespace proxyServer
             string logDir = Application.StartupPath + "\\Logs";
             string logFile = logDir + "\\" + filename;
             if (!Directory.Exists(logDir)) Directory.CreateDirectory(logDir);
-            if (!File.Exists(logFile))
+            if (!System.IO.File.Exists(logFile))
             {
-                using (FileStream fs = File.Create(logFile)) ;
+                System.IO.File.Create(logFile).Close();
             }
 
-            file = logFile;
+            File = logFile;
         }
 
         public void WriteLine(string text)
@@ -6390,11 +6844,11 @@ namespace proxyServer
 
         public void WriteFile(string text)
         {
-            if (File.Exists(file) && printToFile && started)
+            if (System.IO.File.Exists(File) && printToFile && started)
             {
-                string prev = File.ReadAllText(file);
+                string prev = System.IO.File.ReadAllText(File);
                 string next = prev + Environment.NewLine + text;
-                File.WriteAllText(file, next);
+                System.IO.File.WriteAllText(File, next);
             }
         }
 
@@ -6660,11 +7114,13 @@ namespace proxyServer
         {
             if (filters.ContainsKey(filterName)) return false;
 
-            Filter f = new Filter();
-            f.equalFilter = new List<string>();
-            f.startsWithFilter = new List<string>();
-            f.notEqualFilter = new List<string>();
-            f.containsFilter = new List<string>();
+            Filter f = new Filter
+            {
+                equalFilter = new List<string>(),
+                startsWithFilter = new List<string>(),
+                notEqualFilter = new List<string>(),
+                containsFilter = new List<string>()
+            };
 
             filters.Add(filterName, f);
 
@@ -8054,7 +8510,6 @@ namespace proxyServer
         Mode httpMode;
         Mode httpsMode;
         Form1 ctx;
-        int tunnelCount = 0;
         VDependencyWatcher dw;
         System.Windows.Forms.Timer _timer;
 
@@ -8072,9 +8527,7 @@ namespace proxyServer
         {
             public Socket s;
             public byte[] buffer;
-            public Tunnel tunnel;
             public Request request;
-            public VSslHandler sslHandler;
         }
 
         public ProxyServer(string ipAddress, int portNumber, int pendingLimit, VConsole consoleMod, Form1 context)
@@ -8086,8 +8539,8 @@ namespace proxyServer
             ctx = context;
             dw = context.VdwMod;
             dw.AddCondition(() => httpMode == Mode.MITM && !ctx.mitmHttp.started, ctx.CreateLog("MITM mode is set for http, but mitm service is not enabled!", VLogger.LogLevel.warning));
-            dw.AddCondition(() => httpsMode == Mode.MITM && !ctx.server.started, ctx.CreateLog("MITM mode is set for https, but mitm service is not enabled", VLogger.LogLevel.warning));
-            dw.AddCondition(() => httpsMode == Mode.MITM && !ctx.CertMod.started, ctx.CreateLog("MITM mode is set for https, but SSL Certification service is not started!", VLogger.LogLevel.warning));
+            dw.AddCondition(() => httpsMode == Mode.MITM && !ctx.mitmHttp.started, ctx.CreateLog("MITM mode is set for https, but mitm service is not enabled", VLogger.LogLevel.warning));
+            dw.AddCondition(() => httpsMode == Mode.MITM && !ctx.CertMod.Started, ctx.CreateLog("MITM mode is set for https, but SSL Certification service is not started!", VLogger.LogLevel.warning));
             dw.AddCondition(() => ctx.mitmHttp.started && httpMode != Mode.MITM && httpsMode != Mode.MITM, ctx.CreateLog("MITM Service is running but no protocol modes set to MITM mode", VLogger.LogLevel.warning));
             if (autoClean)
             {
@@ -8131,6 +8584,8 @@ namespace proxyServer
                 KillSocket(s, false);
             }
 
+            ctx.LogMod.Log("Client shutdown ok", VLogger.LogLevel.information);
+
             clientList.Clear();
 
             if (started)
@@ -8144,37 +8599,6 @@ namespace proxyServer
 
             stopping = false;
             started = false;
-        }
-
-        public void ListClients()
-        {
-            if (stopping)
-            {
-                console.Debug("Function Call cancelled!");
-                return;
-            }
-            Dictionary<string, int> Clients = new Dictionary<string, int>();
-
-            foreach (Socket sock in clientList)
-            {
-                IPEndPoint ep = (IPEndPoint)sock.RemoteEndPoint;
-                string addr = ep.Address.ToString();
-                if (!Clients.ContainsKey(addr)) Clients.Add(addr, 0);
-                else Clients[addr] += 1;
-            }
-
-            console.WriteLine("=============Client List=============");
-            console.WriteLine(Clients.Count + " client(s) connected");
-            int counter = 0;
-
-            foreach (KeyValuePair<string, int> kvp in Clients)
-            {
-                
-                console.WriteLine(counter + "\t" + kvp.Key + "\t+" + kvp.Value + " socket(s)");
-                counter++;
-            }
-
-            console.WriteLine("==========End Of Client List=========");
         }
 
         public void KillSocket(Socket client, bool autoRemove = true)
@@ -8192,20 +8616,6 @@ namespace proxyServer
             }
             client.Close();
             client.Dispose();
-        }
-
-        public void Kick(int id)
-        {
-            if (stopping) return;
-
-            if (id >= clientList.Count)
-            {
-                ctx.LogMod.Log("Invalid client id!", VLogger.LogLevel.error);
-                return;
-            }
-
-            KillSocket(clientList[id]);
-            ctx.LogMod.Log("Client kicked from the server", VLogger.LogLevel.information);
         }
 
         public void CleanSockets()
@@ -8227,7 +8637,7 @@ namespace proxyServer
 
             if (result)
             {
-                ctx.LogMod.Log("All client disconnected from server", VLogger.LogLevel.information);
+                ctx.LogMod.Log("All clients disconnected from server", VLogger.LogLevel.information);
             }
             else
             {
@@ -8273,15 +8683,16 @@ namespace proxyServer
             {
                 client = server.EndAccept(ar);
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                //console.Debug("[ERROR] Can't receive pending connactions\n" + e.Message);
                 return;
             }
 
             IPEndPoint client_ep = (IPEndPoint)client.RemoteEndPoint;
             string remoteAddress = client_ep.Address.ToString();
             string remotePort = client_ep.Port.ToString();
+
+            //TODO: Implement block command -> keep the server and existing connections alive, but drop new connections
 
             bool allow;
             if (!autoAllow) allow = console.ChoicePrompt("\n[IN] Connection " + remoteAddress + ":" + remotePort + "\nDo you want to allow connection");
@@ -8290,26 +8701,24 @@ namespace proxyServer
             if (allow)
             {
                 clientList.Add(client);
-                ReadObj obj = new ReadObj();
-                obj.buffer = new byte[1024];
-                obj.s = client;
+                ReadObj obj = new ReadObj
+                {
+                    buffer = new byte[1024],
+                    s = client
+                };
                 client.BeginReceive(obj.buffer, 0, obj.buffer.Length, SocketFlags.None, new AsyncCallback(ReadPackets), obj);
-                //console.Debug("Read started");
-                //console.WriteLine("[ALLOW] " + remoteAddress + ":" + remotePort + " Connected to " + ipv4Addr + ":" + port);
             }
             else
             {
-                KillSocket(client);
+                KillSocket(client, !stopping);
                 ctx.LogMod.Log("[REJECT] " + remoteAddress + ":" + remotePort, VLogger.LogLevel.information);
             }
 
             if (!stopping) server.BeginAccept(new AsyncCallback(AcceptClient), null);
-            //context.Prompt();
         }
 
         private void ReadPackets(IAsyncResult ar)
         {
-            //Console.WriteLine("Packet received at: " + DateTime.Now + " : " + DateTime.Now.Millisecond);
             ReadObj obj = (ReadObj) ar.AsyncState;
             Socket client = obj.s;
             byte[] buffer = obj.buffer;
@@ -8318,9 +8727,9 @@ namespace proxyServer
             {
                 read = client.EndReceive(ar);
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                KillSocket(client);
+                KillSocket(client, !stopping);
                 ctx.LogMod.Log("[DISCONNECT] Client Disconnected from server", VLogger.LogLevel.information);
                 return;
             }
@@ -8329,16 +8738,13 @@ namespace proxyServer
                 try { if (client.Connected) client.BeginReceive(obj.buffer, 0, obj.buffer.Length, SocketFlags.None, new AsyncCallback(ReadPackets), obj); }
                 catch (Exception e)
                 {
-                    KillSocket(client);
+                    KillSocket(client, !stopping);
                     Console.WriteLine("Client aborted session!" + Environment.NewLine + e.Message);
                 }
                 return;
-                /*KillSocket(client);
-                Console.WriteLine("Client ended do to sending empty arrays");
-                return;*/
             }
+
             string text = Encoding.ASCII.GetString(buffer, 0, read);
-            //if (text != "") console.Debug("Text Sent: " + text);
             Request r;
             bool sslHandlerStarted = false;
 
@@ -8348,104 +8754,58 @@ namespace proxyServer
                 {
                     string des = obj.request.full;
                     des += text;
-                    r = new Request(des, console);
+                    r = new Request(des);
                 }
-                else r = new Request(text, console);
+                else r = new Request(text);
             }
-            else r = new Request(text, console);
-            //r.Print();
+            else r = new Request(text);
+
             if (!r.notEnded && !r.bogus)
             {
                 ctx.LogMod.Log("<target> [HTTP]", VLogger.LogLevel.request, r);
-
-                if (obj.tunnel != null)
+                Tunnel t = new Tunnel(Tunnel.Mode.HTTP, httpMode, httpsMode, ctx, client, console);
+                t.CreateMinimalTunnel(r);
+                if (t.sslRead && httpMode == Mode.MITM) //Handle MITM SSL Connections
                 {
-                    if (obj.tunnel.CheckHost(r) && !obj.tunnel.tunnelDestroyed)
+                    string host = t.GetHost();
+                    NetworkStream clientNS = new NetworkStream(client);
+                    VSslHandler vsh = new VSslHandler(ctx, console);
+                    VSslHandler.Error errCode = vsh.InitSslStream(clientNS, host);
+                    if (errCode != VSslHandler.Error.Success)
                     {
-                        obj.tunnel.UpdateProtocolMode("http", httpMode);
-                        obj.tunnel.UpdateProtocolMode("https", httpsMode);
-                        obj.tunnel.UpdateRequest(r);
-                        obj.tunnel.UpdateUserClient(client);
-                        obj.tunnel.Send(text);
+                        ctx.LogMod.Log("Init SSL Stream failed\r\nError Code: " + errCode.ToString(), VLogger.LogLevel.error);
                     }
                     else
                     {
-                        tunnelCount++;
-                        Tunnel t = new Tunnel(Tunnel.Mode.HTTP, httpMode, httpsMode, r, ctx, client, console, tunnelCount);
-                        t.CreateTunnel();
-                        t.AutoSend();
-                        obj.tunnel.DestroyTunnel(obj.tunnel);
-                        obj.tunnel = t;
+                        sslHandlerStarted = true;
+                        vsh.InitAsyncRead();
+                        console.Debug("SSL Tunnel MITM Started");
+                        return;
                     }
                 }
-                else
+                else if (t.sslRead && httpsMode == Mode.forward) //Handle HTTPS normal
                 {
-                    tunnelCount++;
-                    Tunnel t = new Tunnel(Tunnel.Mode.HTTP, httpMode, httpsMode, r, ctx, client, console, tunnelCount);
-                    t.CreateTunnel();
-                    if (t.sslRead)
-                    {
-                        //MITM mode is already filtered at CreateTunnel() method
-                        string host = t.GetHost();
-                        NetworkStream clientNS = new NetworkStream(client);
-                        VSslHandler vsh = new VSslHandler(ctx, console);
-                        VSslHandler.Error errCode = vsh.InitSslStream(clientNS, host);
-                        if (errCode != VSslHandler.Error.Success)
-                        {
-                            ctx.LogMod.Log("Init SSL Stream failed", VLogger.LogLevel.error);
-                        }
-                        else
-                        {
-                            sslHandlerStarted = true;
-                            vsh.tunnel = t;
-                            vsh.InitAsyncRead();
-                            obj.sslHandler = vsh;
-                            t.AddSSLHandler(vsh);
-                            return;
-                        }
-                    }
-                    t.AutoSend();
-                    obj.tunnel = t;
+                    t.InitHTTPS(client);
+                    return;
+                }
+
+                if (httpMode == Mode.MITM) //Handle HTTP MITM
+                {
+                    Request httpSend = new Request(t.FormatRequest(r));
+                    Tunnel.Send("", Tunnel.Mode.HTTP, ctx, httpSend, new NetworkStream(client));
+                }
+                else if (httpMode == Mode.forward) //Handle HTTP normal
+                {
+                    t.SendHTTP(r, client);
+                    return;
                 }
             }
             else if (r.notEnded) obj.request = r;
-            else if (r.bogus)
-            {
-                if (obj.tunnel != null)
-                {
-                    if (obj.tunnel.protocol == Tunnel.Mode.HTTPs && !obj.tunnel.tunnelDestroyed)
-                    {
-                        if (httpsMode == Mode.forward)
-                        {
-                            obj.tunnel.UpdateProtocolMode("http", httpMode);
-                            obj.tunnel.UpdateProtocolMode("https", httpsMode);
-                            obj.tunnel.UpdateUserClient(client);
-                            obj.tunnel.Send(buffer, 0, read);
-                        }
-                        else
-                        {
-                            if (obj.sslHandler != null)
-                            {
-                                byte[] ctBytes = obj.sslHandler.ReadSslStream();
-                                string nText = Encoding.ASCII.GetString(ctBytes, 0, ctBytes.Length);
-                                r = new Request(nText, console);
-                                if (!r.bogus && !r.notEnded)
-                                {
-                                    ctx.LogMod.Log("<target> [HTTPS]", VLogger.LogLevel.request, r);
-                                    obj.tunnel.UpdateProtocolMode("http", httpMode);
-                                    obj.tunnel.UpdateProtocolMode("https", httpsMode);
-                                    obj.tunnel.Send(ctBytes, 0, ctBytes.Length);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
             Array.Clear(buffer, 0, buffer.Length);
             try { if (client.Connected && !sslHandlerStarted) client.BeginReceive(obj.buffer, 0, obj.buffer.Length, SocketFlags.None, new AsyncCallback(ReadPackets), obj); }
             catch (Exception e)
             {
-                KillSocket(client);
+                KillSocket(client, !stopping);
                 Console.WriteLine("Client aborted session!" + Environment.NewLine + e.Message);
             }
         }
@@ -8478,7 +8838,7 @@ namespace proxyServer
         {
             input = input.ToLower();
             if (input == "mitm" || input == "man-in-the-middle") return Mode.MITM;
-            if (input == "forward" || input == "normal") return Mode.forward;
+            else if (input == "forward" || input == "normal") return Mode.forward;
             return Mode.Undefined;
         }
 
@@ -8492,7 +8852,6 @@ namespace proxyServer
 
     public class Tunnel : IDisposable
     {
-
         bool disposed = false;
         SafeFileHandle handle = new SafeFileHandle(IntPtr.Zero, true);
 
@@ -8508,29 +8867,10 @@ namespace proxyServer
             if (disposing)
             {
                 handle.Dispose();
-                req = null;
-                try
-                {
-                    s.Shutdown(SocketShutdown.Both);
-                    s.Disconnect(false);
-                }
-                catch (Exception)
-                {
-                    Console.WriteLine("Closing tunnel ungracefully");
-                }
-
-                s.Close();
-                s.Dispose();
-                s = null;
-                //ctx = null;
                 _host = null;
-                Array.Clear(buffer, 0, buffer.Length);
                 console = null;
                 client = null;
-                forwardFails = 0;
-                if (req != null) req.Dispose();
-                req = null;
-                tunnelDestroyed = true;
+                TunnelDestroyed = true;
             }
 
             disposed = true;
@@ -8538,24 +8878,14 @@ namespace proxyServer
 
         //Proxy Tunnel
 
-        public Mode protocol { get; private set; }
-        Request req;
-        Socket s;
+        public Mode Protocol { get; private set; }
         Form1 ctx;
         string _host;
-        public bool autoForward = true;
-        byte[] buffer = new byte[50000];
         VConsole console;
         ProxyServer.Mode http = ProxyServer.Mode.MITM;
         ProxyServer.Mode https = ProxyServer.Mode.MITM;
         Socket client;
-        VLogger logger;
-        int forwardFails = 0;
-        public bool tunnelDestroyed { get; private set; } = false;
-        int tunnelID = 0;
-        VSslHandler vsh = null;
-        SslStream sslClient = null;
-        private string _IPAddress = "";
+        public bool TunnelDestroyed { get; private set; } = false;
 
         public bool sslRead = false;
 
@@ -8565,17 +8895,144 @@ namespace proxyServer
             HTTPs = 2
         }
 
-        public Tunnel(Mode protMode, ProxyServer.Mode httpMode, ProxyServer.Mode httpsMode, Request rhttp, Form1 context, Socket httpClient, VConsole con, int id)
+        public Tunnel(Mode protMode, ProxyServer.Mode httpMode, ProxyServer.Mode httpsMode, Form1 context, Socket httpClient, VConsole con)
         {
-            protocol = protMode;
+            Protocol = protMode;
             http = httpMode;
             https = httpsMode;
-            req = rhttp;
             ctx = context;
             console = con;
             client = httpClient;
-            logger = ctx.LogMod;
-            tunnelID = id;
+        }
+
+        public static void Send(string data, Mode Protocol, Form1 context, Request r = null, NetworkStream targetHttp = null, VSslHandler targetHttps = null)
+        {
+            //ConMod.Debug("Send string");
+            BISend(r, targetHttp, targetHttps, Protocol, context);
+        }
+
+        private static void BISend(Request r, NetworkStream ns, VSslHandler vSsl, Mode Protocol, Form1 ctx)
+        {
+            Task getPage = new Task(new Action(() => {
+
+                if (ctx.mitmHttp.started) ctx.mitmHttp.DumpRequest(r);
+
+                string hostString = r.headers["Host"];
+                string target = r.target.Replace(hostString, string.Empty);
+                if (Protocol == Tunnel.Mode.HTTPs)
+                    hostString = "https://" + hostString + target;
+                else
+                    hostString = "http://" + hostString + target;
+
+                HttpClientHandler handler = new HttpClientHandler() { UseProxy = false, Proxy = null };
+                HttpClient client = new HttpClient(handler);
+                HttpRequestMessage hrm = new HttpRequestMessage
+                {
+                    Method = new HttpMethod(r.method),
+                    RequestUri = new Uri(hostString)
+                };
+
+                foreach (KeyValuePair<string, string> kvp in r.headers.Items)
+                {
+                    hrm.Headers.Add(kvp.Key, kvp.Value);
+                }
+
+                if (r.htmlBody != null) hrm.Content = new StringContent(r.htmlBody);
+
+                client.SendAsync(hrm).ContinueWith(responseTask => {
+
+                    try
+                    {
+                        HttpResponseMessage resp = responseTask.Result;
+                        byte[] content = new byte[0];
+                        string strContent = "";
+                        int statusCode = 0;
+                        string statusDescription = "";
+                        string version = "";
+                        VDictionary headers = new VDictionary();
+                        Task getContent = new Task(() =>
+                        {
+
+                            content = resp.Content.ReadAsByteArrayAsync().Result;
+                            foreach (KeyValuePair<string, IEnumerable<string>> x in resp.Content.Headers)
+                            {
+                                string name = x.Key;
+                                if (name == "Content-Length") ctx.ConMod.Debug("Got content length");
+                                string value = "";
+                                foreach (string val in x.Value)
+                                {
+                                    value += val + ";";
+                                }
+
+                                value = value.Substring(0, value.Length - 1);
+                                headers.Add(name, value);
+                            }
+
+                            ctx.ConMod.Debug("Headers in content" + resp.Content.Headers.Count());
+
+                            strContent = Encoding.ASCII.GetString(content);
+
+                        });
+
+                        Task getHeaders = new Task(() =>
+                        {
+
+                            foreach (KeyValuePair<string, IEnumerable<string>> x in resp.Headers)
+                            {
+                                string name = x.Key;
+                                string value = "";
+                                foreach (string val in x.Value)
+                                {
+                                    value += val + ";";
+                                }
+
+                                value = value.Substring(0, value.Length - 1);
+                                headers.Add(name, value);
+                            }
+
+                        });
+
+                        Task getRest = new Task(() =>
+                        {
+
+                            statusCode = (int)resp.StatusCode;
+                            statusDescription = resp.ReasonPhrase;
+                            version = "HTTP/" + resp.Version.ToString();
+
+                        });
+
+                        getContent.Start();
+                        getHeaders.Start();
+                        getRest.Start();
+
+                        Task.WaitAll(getContent, getHeaders, getRest);
+
+                        Response _r = new Response(statusCode, statusDescription, version, headers, strContent, content, ctx.ConMod, ctx.mitmHttp);
+                        _r.SetManager(ctx.vf);
+                        _r.BindFilter("resp_mime", "mime_white_list");
+                        _r.BindFilter("resp_mime_block", "mime_skip_list");
+                        _r.CheckMimeAndSetBody();
+                        if (ctx.mitmHttp.started)
+                        {
+                            string _target = r.target;
+                            if (_target.Contains("?")) _target = _target.Substring(0, _target.IndexOf("?"));
+                            ctx.mitmHttp.DumpResponse(_r, _target);
+                        }
+                        //ConMod.Debug("Before sending to client");
+                        if (Protocol == Tunnel.Mode.HTTPs) _r.Deserialize(null, r, vSsl);
+                        else _r.Deserialize(ns, r);
+                    }
+                    catch (Exception)
+                    {
+                        //ctx.ConMod.Debug("Error: " + ex.ToString() + "\r\nStackTrace:\r\n" + ex.StackTrace);
+                        //ctx.ConMod.Debug($"On resource: {r.target}");
+                    }
+
+                });
+
+            }));
+
+            getPage.Start();
         }
 
         public string GetHost()
@@ -8583,378 +9040,41 @@ namespace proxyServer
             return _host;
         }
 
-        public bool CheckHost(Request r)
+        public void CreateMinimalTunnel(Request r)
         {
-            string chk = r.headers["Host"];
-            if (chk == _host) return true;
-            return false;
-        }
-
-        public void UpdateRequest(Request r)
-        {
-            req = r;
-            if (ctx.mitmHttp.started) ctx.mitmHttp.DumpRequest(req);
-        }
-
-        public void UpdateProtocolMode(string protocolName, ProxyServer.Mode mode)
-        {
-            if (protocolName == "http") http = mode;
-            else if (protocolName == "https") https = mode;
-        }
-
-        public void AddSSLHandler(VSslHandler sh)
-        {
-            vsh = sh;
-        }
-
-        public void CreateTunnel()
-        {
-            s = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            string host = req.headers["Host"];
-            if (ctx.mitmHttp.started)
+            string host = r.headers["Host"];
+            if (r.method == "CONNECT")
             {
-                ctx.mitmHttp.DumpRequest(req);
-            }
-            console.Debug("Header: " + req.method + " " + req.target + " " + req.version);
-            string ip = "";
-            if (req.method == "CONNECT")
-            {
-                host = host.Replace(":443", "");
-                protocol = Mode.HTTPs;
-                logger.Log(" was sent to <target>", VLogger.LogLevel.request, req);
-                //console.Debug("https, connect request");
-            }
-
-            if (((protocol == Mode.HTTP && http == ProxyServer.Mode.MITM) || (protocol == Mode.HTTPs && https == ProxyServer.Mode.MITM)) && ctx.mitmHttp.started) //only block if mitm is set
-            {
-                bool hostResult = ctx.mitmHttp.CheckHost(req);
-                if (hostResult)
-                {
-                    DestroyTunnel(this);
-                    return;
-                } //Dispose tunnel when host is blocked
-            }
-
-            /*if (host.EndsWith(":443"))
-            {
-                host = host.Replace(":443", String.Empty);
-                protocol = Mode.HTTPs;
-            }*/
-            if (ctx.IpVerification(host)) ip = host;
-            else
-            {
-                try { ip = Dns.GetHostAddresses(host)[0].ToString(); }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Tunnel error in DNS resolve\n" + ex.Message);
-                    return;
-                }
-            }
-
-            if (ctx.mitmHttp.started)
-            {
-                if (ctx.mitmHttp.CheckIP(ip))
-                {
-                    DestroyTunnel(this);
-                    return;
-                } // Tunnel dispose when ip is blocked
-            }
-
-            try
-            {
-                if (protocol == Mode.HTTP) s.Connect(IPAddress.Parse(ip), 80);
-                if (protocol == Mode.HTTPs)
-                {
-                    s.Connect(IPAddress.Parse(ip), 443);
-                    if (https == ProxyServer.Mode.MITM)
-                    {
-                        GenerateVerify();
-                        sslRead = true;
-                    }
-                }
-
-                _IPAddress = ip;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Tunnel to " + ip + " failed!");
-                if (protocol == Mode.HTTP) Generate404();
-                return;
-            }
-
-            _host = host;
-            if (autoForward == true && !sslRead)
-            {
-                ResponseObj ro = new ResponseObj();
-                ro.s = s;
-                ro.resp = null;
-                s.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None, new AsyncCallback(ReadPackets), ro);
-            }
-
-            if (protocol == Mode.HTTPs && s.Connected && req.method == "CONNECT" && !sslRead)
-            {
+                host = host.Replace(":443", string.Empty);
+                Protocol = Mode.HTTPs;
+                sslRead = true;
+                _host = host;
                 GenerateVerify();
             }
+            else
+            {
+                sslRead = false;
+                Protocol = Mode.HTTP;
+                _host = host;
+            }
         }
 
-        private void GenerateVerify()
+        private void GenerateVerify(Socket clientSocket = null)
         {
             string verifyResponse = "HTTP/1.1 200 OK Tunnel Created\r\nTimestamp: " + DateTime.Now + "\r\nProxy-Agent: ah101\r\n\r\n";
             byte[] resp = Encoding.ASCII.GetBytes(verifyResponse);
-            if (s.Connected || https == ProxyServer.Mode.MITM) client.Send(resp, 0, resp.Length, SocketFlags.None);
-            console.Debug("veriy request sent!");
-        }
-
-        public void UpdateUserClient(Socket newClient)
-        {
-            client = newClient;
-        }
-
-        struct ResponseObj
-        {
-            public Socket s;
-            public Response resp;
-        }
-
-        private void ReadPackets(IAsyncResult ar)
-        {
-            ResponseObj o = (ResponseObj)ar.AsyncState;
-            Socket self = o.s;
-            int read = -1;
-            try
+            if (clientSocket != null)
             {
-                read = self.EndReceive(ar);
-            }
-            catch (Exception e)
-            {
-                //console.Debug("Tunnel can't read packets: " + e.Message);
+                clientSocket.Send(resp, 0, resp.Length, SocketFlags.None);
                 return;
             }
-
-            string text = Encoding.ASCII.GetString(buffer, 0, read);
-
-            if (protocol == Mode.HTTP)
-            {
-                if (http == ProxyServer.Mode.forward)
-                {
-                    try
-                    {
-                        if (client.Connected) client.Send(buffer, 0, read, SocketFlags.None);
-                        if (forwardFails > 0) forwardFails = 0;
-                    }
-                    catch (Exception ex)
-                    {
-                        //ctx.server.KillSocket(client);
-                        Console.WriteLine("Tunnel error in data forward HTTP\n" + ex.Message);
-                        forwardFails += 1;
-                    }
-                   // Console.WriteLine("Response sent to client at: " + DateTime.Now + " : " + DateTime.Now.Millisecond);
-                    //console.Debug("Sent");
-                }
-
-                if (http == ProxyServer.Mode.MITM)
-                {
-                    try
-                    {
-                        /*Console.WriteLine("Tunnel id: " + tunnelID);
-                        Console.WriteLine("Request target: " + req.target);*/
-                        byte[] readBytes = new byte[read];
-                        Array.Copy(buffer, readBytes, read);
-                        Response r = null;
-                        bool skip = false;
-
-                        if (o.resp != null && o.resp.skip)
-                        {
-                            r = o.resp;
-                            skip = true;
-                        }
-
-                        if (o.resp != null && o.resp.notEnded && !skip)
-                        {
-                            console.Debug("continuing previous response");
-                            r = o.resp;
-                            r.PushEnd(readBytes);
-                        }
-                        else if (!skip)
-                        {
-                            r = new Response(text, readBytes, console, ctx.mitmHttp);
-                            r.SetManager(ctx.vf);
-                            r.BindFilter("resp_mime", "mime_white_list");
-                            r.BindFilter("resp_mime_block", "mime_skip_list");
-                            r.Serialize();
-                            console.Debug("new response created");
-                        }
-
-                        if (r != null && r.skip)
-                        {
-                            o.resp = r;
-                            client.Send(buffer, 0, read, SocketFlags.None);
-                            if (forwardFails > 0) forwardFails = 0;
-                        }
-
-                        if (!r.notEnded && !r.skip && !skip)
-                        {
-                            //logger.Log("At " + r.headers["Date"], VLogger.LogLevel.response, null, r);
-                            //byte[] newBytes = r.Deserialize();
-                            if (ctx.mitmHttp.started)
-                            {
-                                string target = req.target;
-                                if (target.Contains("?")) target = target.Substring(0, target.IndexOf("?"));
-                                ctx.mitmHttp.DumpResponse(r, target);
-                            }
-                            r.Deserialize(new NetworkStream(client), req);
-                            logger.Log(r.body.Length.ToString() + " bytes sent", VLogger.LogLevel.response, null, r);
-                            r.Dispose();
-                            //Console.WriteLine(r.headers["Content-Type"]);
-                            //if (client.Connected) client.Send(buffer, 0, read, SocketFlags.None);
-                            if (forwardFails > 0) forwardFails = 0;
-                            o.resp = null;
-                        }
-                        else
-                        {
-                            console.Debug("Response is not ended");
-                            o.resp = r;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        //ctx.server.KillSocket(client);
-                        /*Console.WriteLine("Tunnel error in data MITM HTTP\n" + ex.Message);
-                        Console.WriteLine("\n" + ex.StackTrace + "\n");*/
-                        forwardFails += 1;
-                    }
-                }
-            }
-
-            if (protocol == Mode.HTTPs)
-            {
-                if (https == ProxyServer.Mode.forward)
-                {
-                    try
-                    {
-                        client.Send(buffer, 0, read, SocketFlags.None);
-                        if (forwardFails > 0) forwardFails = 0;
-                    }
-                    catch (Exception ex)
-                    {
-                        //ctx.server.KillSocket(client);
-                        Console.WriteLine("Tunnel error in data forward HTTPs\n" + ex.Message);
-                        forwardFails += 1;
-                    }
-                }
-            }
-
-            Array.Clear(buffer, 0, buffer.Length);
-            try { if (!tunnelDestroyed) self.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None, new AsyncCallback(ReadPackets), o); }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Tunnel error in initiating the async read of self\n" + ex.Message);
-            }
-
-            if (forwardFails >= 10)
-            {
-                DestroyTunnel(this);
-            }
-        }
-
-        private void ReadSslStream(IAsyncResult ar)
-        {
-            int bytesRead = 0;
-            Response resp = (Response) ar.AsyncState;
-            try
-            {
-                bytesRead = sslClient.EndRead(ar);
-            }
-            catch (Exception)
-            {
-                return;
-            }
-
-            if (protocol != Mode.HTTPs || https != ProxyServer.Mode.MITM) return;
-            if (bytesRead > 0)
-            {
-                byte[] buf = new byte[bytesRead];
-                Array.Copy(buffer, buf, bytesRead);
-                string text = Encoding.ASCII.GetString(buf);
-                bool supressPushEnd = false;
-                if (resp == null)
-                {
-                    resp = new Response(text, buf, console, ctx.mitmHttp);
-                    resp.SetManager(ctx.vf);
-                    resp.BindFilter("resp_mime", "mime_white_list");
-                    resp.BindFilter("resp_mime_block", "mime_skip_list");
-                    resp.Serialize();
-                    supressPushEnd = true;
-                }
-                else
-                {
-                    if (resp.bogus)
-                    {
-                        string prevText = resp.fullText;
-                        string newText = prevText + text;
-                        byte[] newBuf = new byte[resp.fullBytes.Length + buf.Length];
-                        Array.ConstrainedCopy(resp.fullBytes, 0, newBuf, 0, resp.fullBytes.Length);
-                        Array.ConstrainedCopy(buf, 0, newBuf, resp.fullBytes.Length, buf.Length);
-                        resp = new Response(newText, newBuf, console, ctx.mitmHttp);
-                        resp.SetManager(ctx.vf);
-                        resp.BindFilter("resp_mime", "mime_white_list");
-                        resp.BindFilter("resp_mime_block", "mime_skip_list");
-                        resp.Serialize();
-                        supressPushEnd = true;
-                    }
-                }
-
-                if (resp.skip)
-                {
-                    vsh.WriteSslStream(buf);
-                }
-
-                if (resp.notEnded && !resp.skip && !supressPushEnd)
-                {
-                    resp.PushEnd(buf);
-                }
-
-                if (!resp.notEnded && !resp.skip && !resp.bogus)
-                {
-                    if (ctx.mitmHttp.started)
-                    {
-                        string target = req.target;
-                        if (target.Contains("?")) target = target.Substring(0, target.IndexOf("?"));
-                        ctx.mitmHttp.DumpResponse(resp, target);
-                    }
-                    resp.Deserialize(null, req, vsh);
-                    ctx.LogMod.Log(resp.body.Length.ToString() + " bytes sent", VLogger.LogLevel.response, null, resp);
-                }
-            }
-
-            try { if (s.Connected) sslClient.BeginRead(buffer, 0, buffer.Length, new AsyncCallback(ReadSslStream), resp); }
-            catch (Exception)
-            {
-                return;
-            }
-        }
-
-        public delegate void DestroyTunnelCallback(Tunnel proxyTunnel);
-
-        public void DestroyTunnel(Tunnel proxyTunnel)
-        {
-            if (proxyTunnel.tunnelDestroyed) return;
-            if (ctx.InvokeRequired)
-            {
-                DestroyTunnelCallback c = new DestroyTunnelCallback(DestroyTunnel);
-                ctx.Invoke(c, new object[] { proxyTunnel });
-                return;
-            }
-            else
-            {
-                proxyTunnel.Dispose();
-                proxyTunnel = null;
-            }
+            if (https == ProxyServer.Mode.MITM) client.Send(resp, 0, resp.Length, SocketFlags.None);
+            //console.Debug("verify request sent!");
         }
 
         public string FormatRequest(Request r)
         {
-            if (tunnelDestroyed) return null;
+            if (TunnelDestroyed) return null;
 
             if (_host == null)
             {
@@ -8977,83 +9097,172 @@ namespace proxyServer
 
         private void Generate404()
         {
-            string text = "HTTP/1.1 404 Not Found\r\nTimestamp: " + DateTime.Now + "\r\nProxy-Agent:ah101\r\n\r\n";
+            string text = "HTTP/1.1 404 Not Found\r\nTimestamp: " + DateTime.Now + "\r\nProxy-Agent: ah101\r\n\r\n";
             byte[] buf = Encoding.ASCII.GetBytes(text);
             client.Send(buf, 0, buf.Length, SocketFlags.None);
         }
 
-        public void AutoSend()
+        private struct RawObj
         {
-            if (protocol == Mode.HTTPs) return;
-            string toSend = FormatRequest(req);
-            if (toSend == null) return;
-            Send(toSend);
+            public byte[] data;
+            public Socket client;
+            public Socket bridge;
         }
 
-        public void Send(string data)
+        private struct RawSSLObj
         {
-            if (protocol == Mode.HTTPs && https == ProxyServer.Mode.MITM)
+            public RawObj rawData;
+            public Request request;
+            public string fullText;
+        }
+
+        private void ForwardRawHTTP(IAsyncResult ar)
+        {
+            try
             {
-                if (sslClient == null)
+                RawObj data = (RawObj)ar.AsyncState;
+                if (data.client == null || data.bridge == null) return;
+                int bytesRead = data.bridge.EndReceive(ar);
+                if (bytesRead > 0)
                 {
-                    NetworkStream ns = new NetworkStream(s);
-                    SslStream ssl = new SslStream(ns);
-                    sslClient = ssl;
+                    byte[] toSend = new byte[bytesRead];
+                    Array.Copy(data.data, toSend, bytesRead);
+                    data.client.Send(toSend, 0, bytesRead, SocketFlags.None);
+                    Array.Clear(toSend, 0, bytesRead);
                 }
-
-                if (!sslClient.IsAuthenticated)
+                else
                 {
-                    sslClient.AuthenticateAsClient(_host);
-                    if (sslClient.IsAuthenticated) sslClient.BeginRead(buffer, 0, buffer.Length, new AsyncCallback(ReadSslStream), null);
-                }
-
-                byte[] buf = Encoding.GetEncoding("ISO-8859-1").GetBytes(data);
-                try { sslClient.Write(buf, 0, buf.Length); }
-                catch (Exception)
-                {
-                    sslClient.Close();
-                    sslClient.Dispose();
-                    sslClient = null; // <-- forcing the function to init a reconnect
-                    Send(data); // calling the same function with the same data, but now with sslClient set to null
+                    if (data.client != null)
+                    {
+                        data.client.Close();
+                        data.client.Dispose();
+                        data.client = null; 
+                    }
+                    if (data.bridge != null)
+                    {
+                        data.bridge.Close();
+                        data.bridge.Dispose();
+                        data.bridge = null; 
+                    }
                     return;
                 }
-                console.Debug("SSL data sent: \r\n" + data);
-                return;
+                data.data = new byte[2048];
+                data.bridge.BeginReceive(data.data, 0, 2048, SocketFlags.None, new AsyncCallback(ForwardRawHTTP), data);
             }
-
-            byte[] _buffer = Encoding.GetEncoding("ISO-8859-1").GetBytes(data);
-            try { s.Send(_buffer, _buffer.Length, SocketFlags.None); }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ctx.server.KillSocket(s, false); // this client is not in the list, don't remove it
-                s = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                s.Connect(_IPAddress, 80);
-                ResponseObj ro = new ResponseObj();
-                ro.s = s;
-                ro.resp = null;
-                s.BeginReceive(buffer, 0, buffer.Length, SocketFlags.None, new AsyncCallback(ReadPackets), ro);
-                Send(data);
+                //console.Debug($"Forawrd RAW HTTP failed: {ex.ToString()}");
             }
         }
 
-        public void Send(byte[] data, int offset, int length = 0)
+        private IPAddress GetIPOfHost(string hostname)
         {
-            if (length == 0) length = data.Length;
-            try { s.Send(data, offset, length, SocketFlags.None); }
-            catch (Exception ex)
+            if (!IPAddress.TryParse(hostname, out IPAddress address))
             {
-                Console.WriteLine("Tunnel send error\n" + ex.Message);
+                IPAddress[] ips = Dns.GetHostAddresses(hostname);
+                return (ips.Length > 0) ? ips[0] : null;
+            }
+            else return address;
+        }
+
+        public void SendHTTP(Request r, Socket browser)
+        {
+            try
+            {
+                string code = FormatRequest(r);
+                Socket bridge = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                IPAddress ip = GetIPOfHost(r.headers["Host"]);
+                if (ip == null)
+                {
+                    if (browser != null)
+                    {
+                        browser.Close();
+                        browser.Dispose();
+                        browser = null;
+                    }
+
+                    return;
+                }
+                bridge.Connect(ip, 80);
+                RawObj ro = new RawObj() { client = browser, data = new byte[2048], bridge = bridge };
+                bridge.BeginReceive(ro.data, 0, 2048, SocketFlags.None, new AsyncCallback(ForwardRawHTTP), ro);
+                bridge.Send(Encoding.ASCII.GetBytes(code));
+            }
+            catch (SocketException socketError)
+            {
+                console.Debug($"Failed to tunnel http traffic for {r.headers["Host"]}: {socketError.ToString()}");
             }
         }
 
-        public byte[] Read()
+        private void ReadBrowser(IAsyncResult ar)
         {
-            byte[] buffer = new byte[1024];
-            int read = s.Receive(buffer, 0, buffer.Length, SocketFlags.None);
-            byte[] recv = new byte[read];
-            Array.Copy(buffer, recv, read);
-            Array.Clear(buffer, 0, buffer.Length);
-            return recv;
+            try
+            {
+                RawSSLObj rso = (RawSSLObj)ar.AsyncState;
+                if (rso.rawData.client == null || rso.rawData.bridge == null) return;
+                int bytesRead = rso.rawData.client.EndReceive(ar);
+                if (bytesRead > 0)
+                {
+                    byte[] req = new byte[bytesRead];
+                    Array.Copy(rso.rawData.data, req, bytesRead);
+                    rso.rawData.bridge.Send(req, 0, bytesRead, SocketFlags.None);
+                    Array.Clear(req, 0, bytesRead);
+                }
+                else
+                {
+                    if (rso.rawData.client != null)
+                    {
+                        rso.rawData.client.Close();
+                        rso.rawData.client.Dispose();
+                        rso.rawData.client = null; 
+                    }
+                    if (rso.rawData.bridge != null)
+                    {
+                        rso.rawData.bridge.Close();
+                        rso.rawData.bridge.Dispose();
+                        rso.rawData.bridge = null; 
+                    }
+                    return;
+                }
+
+                rso.rawData.data = new byte[2048];
+                rso.rawData.client.BeginReceive(rso.rawData.data, 0, 2048, SocketFlags.None, new AsyncCallback(ReadBrowser), rso);
+            }
+            catch (Exception)
+            {
+                //console.Debug($"Failed to read raw http from browser: {ex.ToString()}");
+            }
+        }
+
+        public void InitHTTPS(Socket browser)
+        {
+            if (https == ProxyServer.Mode.MITM) return;
+            try
+            {
+                Socket bridge = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                IPAddress ip = GetIPOfHost(_host);
+                if (ip == null)
+                {
+                    if (browser != null)
+                    {
+                        browser.Close();
+                        browser.Dispose();
+                        browser = null;
+                    }
+
+                    return;
+                }
+                bridge.Connect(ip, 443);
+                RawSSLObj rso = new RawSSLObj() { fullText = "", request = null, rawData = new RawObj { data = new byte[2048], client = browser, bridge = bridge } };
+                RawObj ro = new RawObj() { data = new byte[2048], bridge = bridge, client = browser };
+                bridge.BeginReceive(ro.data, 0, 2048, SocketFlags.None, new AsyncCallback(ForwardRawHTTP), ro);
+                browser.BeginReceive(rso.rawData.data, 0, 2048, SocketFlags.None, new AsyncCallback(ReadBrowser), rso);
+                GenerateVerify(browser);
+            }
+            catch (SocketException socketError)
+            {
+                console.Debug($"Failed to create http tunnel: {socketError.ToString()}");
+            }
         }
     }
 
@@ -9075,7 +9284,6 @@ namespace proxyServer
             {
                 handle.Dispose();
                 full = null;
-                console = null;
                 target = null;
                 method = null;
                 version = null;
@@ -9089,20 +9297,17 @@ namespace proxyServer
         }
 
         public string full;
-        VConsole console;
         public bool bogus = false;
         public bool notEnded = false;
         public string target;
         public string method;
         public string version;
         public string htmlBody;
-        //public Dictionary<string, string> headers = new Dictionary<string, string>();
         public VDictionary headers = new VDictionary();
 
-        public Request(string req, VConsole ConMod, bool sslMode = false)
+        public Request(string req, bool sslMode = false)
         {
             full = req;
-            console = ConMod;
             Serialize(sslMode);
         }
 
@@ -9154,22 +9359,8 @@ namespace proxyServer
             }
             catch (Exception)
             {
-                //console.Debug("Bogus Request (Ignored)");
                 bogus = true;
             }
-        }
-
-        public void Print()
-        {
-            if (bogus)
-            {
-                //console.WriteLine("[WARNING] Bogus Packet Detected!");
-                return;
-            }
-            console.WriteLine("HTTP Request:");
-            console.WriteLine("\t\tMethod: " + method);
-            console.WriteLine("\t\tURL: " + target);
-            console.WriteLine("\t\tVersion: " + version);
         }
 
         public string Deserialize()
@@ -9211,9 +9402,9 @@ namespace proxyServer
                 filterNames.Clear();
                 filterNames = null;
                 _vfmanager = null;
-                fullText = null;
-                Array.Clear(fullBytes, 0, fullBytes.Length);
-                fullBytes = null;
+                FullText = null;
+                Array.Clear(FullBytes, 0, FullBytes.Length);
+                FullBytes = null;
                 version = null;
                 statusCode = 0;
                 httpMessage = null;
@@ -9232,13 +9423,13 @@ namespace proxyServer
         private Dictionary<string, object> filterNames = new Dictionary<string, object>();
         private VFilter _vfmanager;
 
-        public Dictionary<string, object> filterName
+        public Dictionary<string, object> FilterName
         {
             get { return filterNames; }
             set { filterNames = value; }
         }
 
-        public VFilter manager
+        public VFilter Manager
         {
             get { return _vfmanager; }
             set { _vfmanager = value; }
@@ -9301,11 +9492,11 @@ namespace proxyServer
 
             if (sMethod == "and")
             {
-                return manager.RunAllCompareAnd(targetFilterName, input);
+                return Manager.RunAllCompareAnd(targetFilterName, input);
             }
             else if (sMethod == "or")
             {
-                return manager.RunAllCompareOr(targetFilterName, input);
+                return Manager.RunAllCompareOr(targetFilterName, input);
             }
             else
             {
@@ -9316,8 +9507,8 @@ namespace proxyServer
 
         public bool UnBindFilter(string validFilterName)
         {
-            if (!filterName.ContainsKey(validFilterName)) return false;
-            filterName.Remove(validFilterName);
+            if (!FilterName.ContainsKey(validFilterName)) return false;
+            FilterName.Remove(validFilterName);
             return true;
         }
 
@@ -9334,13 +9525,13 @@ namespace proxyServer
 
         public void SetManager(VFilter fman)
         {
-            manager = fman;
+            Manager = fman;
         }
 
         //Main response parser class
 
-        public string fullText { get; private set; } = "";
-        public byte[] fullBytes { get; private set; }
+        public string FullText { get; private set; } = "";
+        public byte[] FullBytes { get; private set; }
         public string version = "";
         public int statusCode = 0;
         public string httpMessage = "";
@@ -9348,31 +9539,62 @@ namespace proxyServer
         public byte[] body = new byte[2048];
         public string bodyText = "";
         private VConsole console;
-        private byte[] rStore;
         public bool notEnded = false;
         public bool bogus = false;
-        public bool isChunked = false;
-        private int dataWritten = 0;
         public bool skip = false;
         private VMitm mitm;
 
-        public Response(string result, byte[] rBytes, VConsole con, VMitm mitmHttp)
+        public Response(int _statusCode, string _httpMessage, string _version, VDictionary _headers, string _body, byte[] fullBytes, VConsole con, VMitm mitmHttp)
         {
-            fullText = result;
-            fullBytes = rBytes;
+            statusCode = _statusCode;
+            httpMessage = _httpMessage;
+            version = _version;
+            bodyText = _body;
+            body = fullBytes;
             console = con;
             mitm = mitmHttp;
+            headers = _headers;
+        }
+
+        public void CheckMimeAndSetBody()
+        {
+            if (headers.ContainsKey("Content-Length") && headers["Content-Length"] == "0") return;
+            if (!headers.ContainsKey("Content-Type"))
+            {
+                body = new byte[0];
+                return;
+            }
+
+            if (headers.ContainsKey("Content-Type"))
+            {
+                string cType = headers["Content-Type"];
+                if (cType.Contains(";")) cType = cType.Substring(0, cType.IndexOf(';'));
+
+                if (SearchFilter("or", "mime_skip_list", cType))
+                {
+                    skip = true;
+                    bodyText = "";
+                }
+
+                if (!SearchFilter("or", "mime_white_list", cType))
+                {
+                    bodyText = "";
+                }
+            }
+
+            DecodeArray();
         }
 
         public void WriteLine(string text)
         {
-            console.WriteLine(text, "ig.null"); // this class don't have interactive mode, so always write to ig.null
+            console.WriteLine(text, "ig.null"); // this class doesn't have interactive mode, so always write to ig.null
         }
 
         private void DecodeArray()
         {
             notEnded = false;
             string cType = headers["Content-Type"];
+            if (cType.Contains(";")) cType = cType.Substring(0, cType.IndexOf(';'));
             VDecoder vd = new VDecoder();
             bool isConvertable = false;
             if (filterNames.Count > 0)
@@ -9381,291 +9603,31 @@ namespace proxyServer
             }
             if (isConvertable && !headers.ContainsKey("Content-Encoding"))
             {
-                bodyText = vd.DecodeCharset(cType, body, body.Length);
+                bodyText = vd.DecodeCharset(headers["Content-Type"], body, body.Length);
             }
             else if (isConvertable && headers.ContainsKey("Content-Encoding"))
             {
                 string enc = headers["Content-Encoding"];
                 if (enc == "gzip") body = vd.DecodeGzipToBytes(body);
+                else if (enc == "deflate") body = vd.DecodeDeflate(body);
+                else if (enc == "br") body = vd.DecodeBrotli(body);
 
-                bodyText = vd.DecodeCharset(cType, body, body.Length);
+                bodyText = vd.DecodeCharset(headers["Content-Type"], body, body.Length);
                 //IMPORTANT: Use push end -- the data is converted to text correctly
             }
             else if (!isConvertable && headers.ContainsKey("Content-Encoding"))
             {
-                //Decode contents to byte arra
+
+                //Decode contents to byte array
                 string enc = headers["Content-Encoding"];
                 if (enc == "gzip") body = vd.DecodeGzipToBytes(body);
+                else if (enc == "deflate") body = vd.DecodeDeflate(body);
+                else if (enc == "br") body = vd.DecodeBrotli(body);
             }
             else
             {
                 //Data is in clearText, not convertable to printable (text) format for ex. image file, exe file
                 bodyText = "";
-            }
-        }
-
-        public void PushEnd(byte[] rawData)
-        {
-            //rawData itself is not a gzip stream
-            if (!notEnded) return;
-            if (notEnded && isChunked)
-            {
-                byte[] concat = DecodeChunk(rawData);
-                byte[] temp = new byte[rStore.Length];
-                Array.Copy(rStore, temp, rStore.Length);
-                rStore = new byte[concat.Length + temp.Length];
-                Array.Copy(temp, rStore, temp.Length);
-                Array.ConstrainedCopy(concat, 0, rStore, temp.Length, concat.Length);
-                dataWritten += concat.Length;
-                if (Encoding.ASCII.GetString(concat).EndsWith("\r\n\r\n"))
-                {
-                    //End of chunked stream
-                    body = rStore;
-                    DecodeArray();
-                }
-
-                return;
-            }
-            int ctLength = int.Parse(headers["Content-Length"]);
-            console.Debug("Content length is: " + ctLength.ToString());
-            Array.ConstrainedCopy(rawData, 0, rStore, dataWritten, rawData.Length);
-            dataWritten += rawData.Length;
-            if (dataWritten == ctLength)
-            {
-                console.Debug("check passed!");
-                body = rStore;
-                //Array.Clear(rStore, 0, rStore.Length);
-                DecodeArray();
-            }
-        }
-
-        private byte[] DecodeChunk(byte[] inputData)
-        {
-            byte[] result = null;
-
-            int chunkLength = 0;
-            int prevEnd = 0;
-
-            for (int i = 0; i < inputData.Length; i++)
-            {
-                if (chunkLength == 0)
-                {
-                    byte chr = inputData[i];
-                    char c = Convert.ToChar(chr);
-
-                    if (c == '\r')
-                    {
-                        byte[] lData = new byte[i - prevEnd];
-                        Array.ConstrainedCopy(inputData, prevEnd, lData, 0, i - prevEnd);
-                        if (lData.Length == 1 && lData[0] == 0) return result;
-                        chunkLength = int.Parse(Encoding.ASCII.GetString(lData), System.Globalization.NumberStyles.HexNumber);
-                        prevEnd += lData.Length + 2;
-                        continue;
-                    }
-                }
-                else
-                {
-                    if (result == null)
-                    {
-                        result = new byte[chunkLength];
-                        Array.ConstrainedCopy(inputData, prevEnd, result, 0, chunkLength);
-                    }
-                    else
-                    {
-                        byte[] tmp = new byte[result.Length];
-                        Array.Copy(result, tmp, result.Length);
-                        result = new byte[tmp.Length + chunkLength];
-                        Array.Copy(tmp, result, tmp.Length);
-                        Array.ConstrainedCopy(inputData, prevEnd, result, tmp.Length, chunkLength);
-                    }
-
-                    i += chunkLength;
-                    prevEnd = i;
-                    chunkLength = 0;
-                }
-            }
-
-            return result;
-        }
-
-        public void Serialize()
-        {
-            try
-            {
-                if (fullText == "" && fullBytes.Length == 0) return;
-                String[] lines = fullText.Split('\n');
-                string firstLine = lines[0];
-                //Console.WriteLine(firstLine + " " + notEnded.ToString());
-                int firstSpace = firstLine.IndexOf(' ');
-                int secondSpace = firstLine.IndexOf(' ', firstSpace + 1);
-                version = firstLine.Substring(0, firstSpace);
-                statusCode = int.Parse(firstLine.Substring(firstSpace, secondSpace - firstSpace));
-                httpMessage = firstLine.Substring(secondSpace + 1).Replace("\r", "");
-                firstLine = null;
-                bool headersCompleted = false;
-                int chrIndex = httpMessage.Length + version.Length + statusCode.ToString().Length + 1 + 2;
-                for (int i = 1; i < lines.Length; i++)
-                {
-                    string line = lines[i].Replace("\r", String.Empty);
-                    if (!headersCompleted) chrIndex += lines[i].Length + 1;
-                    if (line == "")
-                    {
-                        headersCompleted = true;
-                        chrIndex += 1;
-                        continue;
-                    }
-                    if (!headersCompleted)
-                    {
-                        string hName = line.Substring(0, line.IndexOf(':'));
-                        string hVal = line.Substring(line.IndexOf(':') + 2);
-                        headers.Add(hName, hVal);
-                    }
-                    else
-                    {
-                        break;
-                        //notEnded = false; // if loop doesn't enter here, because the body is sent in a separate packet then it's not ended! :)
-                        //if (headers.ContainsKey("Content-Type"))
-                        //{
-                        //    if (filterNames.Count > 0)
-                        //    {
-                        //        if (SearchFilter("or", "mime_skip_list", headers["Content-Type"]))
-                        //        {
-                        //            skip = true;
-                        //            return;
-                        //        }
-                        //    }
-                        //}
-
-                        //if (headers.ContainsKey("Content-Length"))
-                        //{
-                        //    int cLength = int.Parse(headers["Content-Length"]);
-                        //    console.Debug("prev + content length = " + (cLength + chrIndex).ToString());
-                        //    console.Debug("fullbytes length: " + fullBytes.Length);
-                        //    if ((cLength + chrIndex) != fullBytes.Length)
-                        //    {
-                        //        notEnded = true;
-                        //        rStore = new byte[cLength];
-                        //        //Array.Copy(fullBytes, rStore, fullBytes.Length);
-                        //        Array.ConstrainedCopy(fullBytes, chrIndex, rStore, 0, fullBytes.Length - chrIndex);
-                        //        dataWritten = fullBytes.Length - chrIndex;
-                        //        //prev. decoding rStore with gzip
-                        //        // IMPORTANT: here the gzip decode is running fine!
-                        //        return;
-                        //    }
-                        //    else
-                        //    {
-                        //        body = new byte[fullBytes.Length - chrIndex];
-                        //        Array.ConstrainedCopy(fullBytes, chrIndex, body, 0, fullBytes.Length - chrIndex);
-                        //        DecodeArray();
-                        //    }
-                        //    break;
-                        //}
-                        //else if (!headers.ContainsKey("Content-Length") && headers.ContainsKey("Transfer-Encoding"))
-                        //{
-                        //    //https://en.wikipedia.org/wiki/Chunked_transfer_encoding -- only can decode (gzip, deflate) after the chunks are concatanated
-                        //    string te = headers["Transfer-Encoding"];
-                        //    if (te == "chunked")
-                        //    {
-                        //        byte[] chunk = new byte[fullBytes.Length - chrIndex];
-                        //        Array.ConstrainedCopy(fullBytes, chrIndex, chunk, 0, fullBytes.Length - chrIndex);
-                        //        byte[] concat = DecodeChunk(chunk);
-                        //        rStore = new byte[concat.Length];
-                        //        Array.Copy(concat, rStore, concat.Length);
-                        //        if (Encoding.ASCII.GetString(chunk).EndsWith("\r\n\r\n"))
-                        //        {
-                        //            body = rStore;
-                        //            DecodeArray();
-                        //        }
-                        //        else
-                        //        {
-                        //            notEnded = true;
-                        //            isChunked = true;
-                        //            dataWritten = concat.Length;
-                        //        }
-                        //    }
-
-                        //    break;
-                        //}
-                    }
-                }
-
-                if (headers.ContainsKey("Content-Type"))
-                {
-                    string cType = headers["Content-Type"];
-                    if (cType.Contains(";")) cType = cType.Split(';')[0];
-
-                    if (filterNames.Count > 0)
-                    {
-                        if (SearchFilter("or", "mime_skip_list", cType))
-                        {
-                            skip = true;
-                            return;
-                        }
-                    }
-                }
-
-                if (headers.ContainsKey("Content-Length"))
-                {
-                    int cLength = int.Parse(headers["Content-Length"]);
-                    console.Debug("prev + content length = " + (cLength + chrIndex).ToString());
-                    console.Debug("fullbytes length: " + fullBytes.Length);
-                    if ((cLength + chrIndex) != fullBytes.Length)
-                    {
-                        notEnded = true;
-                        rStore = new byte[cLength];
-                        //Array.Copy(fullBytes, rStore, fullBytes.Length);
-                        if (fullBytes.Length - chrIndex != - 1)
-                        {
-                            Array.ConstrainedCopy(fullBytes, chrIndex, rStore, 0, fullBytes.Length - chrIndex);
-                            dataWritten = fullBytes.Length - chrIndex;
-                        }
-                        else
-                        {
-                            dataWritten = 0;
-                        }
-                        //prev. decoding rStore with gzip
-                        // IMPORTANT: here the gzip decode is running fine!
-                        return;
-                    }
-                    else
-                    {
-                        body = new byte[fullBytes.Length - chrIndex];
-                        Array.ConstrainedCopy(fullBytes, chrIndex, body, 0, fullBytes.Length - chrIndex);
-                        DecodeArray();
-                    }
-                }
-                else if (!headers.ContainsKey("Content-Length") && headers.ContainsKey("Transfer-Encoding"))
-                {
-                    //https://en.wikipedia.org/wiki/Chunked_transfer_encoding -- only can decode (gzip, deflate) after the chunks are concatanated
-                    string te = headers["Transfer-Encoding"];
-                    if (te == "chunked")
-                    {
-                        byte[] chunk = new byte[fullBytes.Length - chrIndex];
-                        Array.ConstrainedCopy(fullBytes, chrIndex, chunk, 0, fullBytes.Length - chrIndex);
-                        byte[] concat = DecodeChunk(chunk);
-                        rStore = new byte[concat.Length];
-                        Array.Copy(concat, rStore, concat.Length);
-                        if (Encoding.ASCII.GetString(chunk).EndsWith("\r\n\r\n"))
-                        {
-                            body = rStore;
-                            DecodeArray();
-                        }
-                        else
-                        {
-                            notEnded = true;
-                            isChunked = true;
-                            dataWritten = concat.Length;
-                        }
-                    }
-                }
-
-                //Serialize completed yay! :)
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Serialize error: " + ex.Message);
-                Console.WriteLine("St: " + ex.StackTrace);
-                bogus = true;
             }
         }
 
@@ -9678,49 +9640,58 @@ namespace proxyServer
 
             VDecoder vd = new VDecoder();
 
-            if (mitm != null && mitm.started)
+            if (headers.ContainsKey("Content-Length") && headers["Content-Length"] != "0" && headers["Content-Length"] != null)
             {
-                if (bodyText != "")
+                if (mitm != null && mitm.started) //MITM Media and Text injection
                 {
-                    if (mitm.CheckBody(bodyText)) return;
-                    string cType = (headers.ContainsKey("Content-Type")) ? headers["Content-Type"] : null;
-                    if (cType != null)
+                    if (bodyText != "")
                     {
-                        string nt = "";
-                        nt = mitm.Inject(bodyText, headers["Content-Type"]);
-                        if (nt != null) bodyText = nt;
+                        if (mitm.CheckBody(bodyText)) return;
+                        string cType = (headers.ContainsKey("Content-Type")) ? headers["Content-Type"] : null;
+                        if (cType != null)
+                        {
+                            string nt = "";
+                            nt = mitm.Inject(bodyText, headers["Content-Type"]);
+                            if (nt != null) bodyText = nt;
+                        }
+                    }
+                    else
+                    {
+                        byte[] n = mitm.MediaRewrite(this, req);
+                        if (n != null) body = n;
                     }
                 }
-                else
+
+                if (bodyText != "" && headers.ContainsKey("Content-Encoding"))
                 {
-                    byte[] n = mitm.MediaRewrite(this, req);
-                    if (n != null) body = n;
+                    Array.Clear(body, 0, body.Length);
+                    byte[] toCode = vd.EncodeCharset(headers["Content-Type"], bodyText);
+                    string enc = headers["Content-Encoding"];
+                    if (enc == "gzip") body = vd.EncodeGzip(toCode);
+                    else if (enc == "deflate") body = vd.EncodeDeflate(toCode);
+                    else if (enc == "br") body = vd.EncodeBrotli(toCode);
+                    Array.Clear(toCode, 0, toCode.Length);
                 }
-            }
+                else if (bodyText == "" && headers.ContainsKey("Content-Encoding"))
+                {
+                    string enc = headers["Content-Encoding"];
+                    if (enc == "gzip") body = vd.EncodeGzip(body);
+                    else if (enc == "deflate") body = vd.EncodeDeflate(body);
+                    else if (enc == "br") body = vd.EncodeBrotli(body);
+                }
+                else if (bodyText != "" && !headers.ContainsKey("Content-Encoding"))
+                {
+                    body = vd.EncodeCharset(headers["Content-Type"], bodyText);
+                }
 
-            if (bodyText != "" && headers.ContainsKey("Content-Encoding"))
-            {
-                Array.Clear(body, 0, body.Length);
-                byte[] toCode = vd.EncodeCharset(headers["Content-Type"], bodyText);
-                body = vd.EncodeGzip(toCode);
-                Array.Clear(toCode, 0, toCode.Length);
+                ctLength = body.Length;
             }
-            else if (bodyText == "" && headers.ContainsKey("Content-Encoding"))
-            {
-                body = vd.EncodeGzip(body);
-            }
-            else if (bodyText != "" && !headers.ContainsKey("Content-Encoding"))
-            {
-                body = vd.EncodeCharset(headers["Content-Type"], bodyText);
-            }
-
-            ctLength = body.Length;
 
             foreach (KeyValuePair<string, string> kvp in headers.Items)
             {
                 string line = "";
-                if (kvp.Key == "Content-Length") line = "Content-Length: " + ctLength + "\r\n";
-                else if (kvp.Key == "Transfer-Encoding" && kvp.Value == "chunked")
+                if (kvp.Key == "Content-Length" && ctLength > 0) line = "Content-Length: " + ctLength + "\r\n";
+                else if (kvp.Key == "Transfer-Encoding" && kvp.Value == "chunked" && ctLength > 0)
                 {
                     // insert the content-length and skip the transfer-encoding header, because we concatanated it.
                     line = "Content-Length: " + ctLength.ToString() + "\r\n";
@@ -9730,19 +9701,21 @@ namespace proxyServer
                 sResult += line;
             }
 
-            sResult += "\r\n";
+            //console.Debug($"{req.target} - responded with content-type: {headers["Content-Type"]}");
 
+            sResult += "\r\n";
             byte[] text = Encoding.ASCII.GetBytes(sResult);
             if (vsh == null)
             {
                 ns.Write(text, 0, text.Length);
-                ns.Write(body, 0, body.Length);
+                if (ctLength > 0) ns.Write(body, 0, body.Length);
                 ns.Flush();
             }
             else
             {
+                //console.Debug("Handler " + vsh.HandlerID + " receiving " + (headers.ContainsKey("Content-Type") ? headers["Content-Type"] : "No content type sent"));
                 vsh.WriteSslStream(text);
-                vsh.WriteSslStream(body);
+                if (ctLength > 0) vsh.WriteSslStream(body);
                 vsh.FlushSslStream();
             }
         }

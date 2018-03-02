@@ -35,6 +35,10 @@
     <Reference Include="appCom">
       <HintPath>..\..\appCom\appCom\bin\Debug\appCom.dll</HintPath>
     </Reference>
+    <Reference Include="BouncyCastle.Crypto, Version=1.8.1.0, Culture=neutral, PublicKeyToken=0e99375e54769942">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>bin\Debug\BouncyCastle.Crypto.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -48,6 +52,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BrotliCompression.cs" />
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
