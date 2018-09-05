@@ -1,5 +1,5 @@
-#Man in the Middle attacks
-##Blocking a server by hostname  
+# Man in the Middle attacks
+## Blocking a server by hostname  
 This tutorial will walkthrough the process of blacklisting a specific hostname.  
 Let's say we want to block all hostnames, which begin with *mail.*  
 Commands:  
@@ -21,13 +21,13 @@ Commands:
 And that's it, do either one or two of the optional commands.  
 if you choose http the client will not be alerted only http traffic will get handled by mitm manager, the https traffic remains to be forwarded normally  
 if you choose https the client will get presented with a big alert, if the client accepts the alert then the data will continue to flow and mitm manager can handle https stuff  
-##Setting up HTTPs MITM Attacks  
+## Setting up HTTPs MITM Attacks  
 The program has a built in help for this  
 Just type `help int config_ssl_mitm` - to run that help!  
-##Setting up POST Request Dump  
+## Setting up POST Request Dump  
 Also a built in help exists, just type `help int config_post_dump` - to run that help.  
 To get more help menus type `help int` to list available names!  
-##Setting up Cookie Dump  
+## Setting up Cookie Dump  
 Dump all cookies sent by the client:  
 `mitm up` - Enable MITM service
 `mitm` - Enter interactive mode  
@@ -37,9 +37,9 @@ Dump all cookies sent by the client:
 `start` - Start the server  
 Set MITM mode for one or all protocols with the above methods.  
 You can read the cookies at Dump\cookie_dump.txt.  
-##Setup automatic injection  
+## Setup automatic injection  
 If it doesn't matter what response, or where the content get's injected in, then type `help int config_inject` - to get help about auto injection  
-##Setup matching injection  
+## Setup matching injection  
 If it does matter, then use match injection for a line-by-line scan for the injection's location
 Just follow through the code:  
 ```
